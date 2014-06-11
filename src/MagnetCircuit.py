@@ -134,7 +134,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.fieldB = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
         self.fieldANormalised = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
         self.fieldBNormalised = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
-        self.k1 = -1.0
+        self.k1val = -1000
         self.scaleField=False
         self.calc_current = -1.0
         self.actual_current = - 1.0
@@ -145,7 +145,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.ps_device = PyTango.DeviceProxy(self.PowerSupplyProxy)        
             self.actual_current =  self.ps_device.Current
             self.set_state(self.ps_device.State())
-            (self.k1, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
+
+            #See how the fields are intially.
+            (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
                 = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.ps_device.Current)
 
             #To give consistent starting conditions, now calculate the current given these fields
@@ -177,7 +179,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         try:            
             self.set_state(self.ps_device.State())
             self.actual_current =  self.ps_device.Current
-            (self.k1, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
+            (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
                 = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.actual_current)
         except PyTango.DevFailed as e:
             self.actual_current_quality =  PyTango.AttrQuality.ATTR_INVALID
@@ -238,7 +240,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 self.set_current()
             else:
                 self.debug_stream("Energy changed: will recalculate fields")
-                (self.k1, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
+                (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
                     = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.actual_current)
         else:
             attr.set_quality(self.actual_current_quality)
@@ -258,18 +260,19 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     def read_k1(self, attr):
         self.debug_stream("In read_k1()")
-        attr_k1_read = self.k1
+        attr_k1_read = self.k1val
         attr.set_value(attr_k1_read)
+        attr.set_write_value(self.k1val)
 
     def read_intk1(self, attr):
         self.debug_stream("In read_intk1()")
-        attr_intk1_read = self.k1 * self.Length
+        attr_intk1_read = self.k1val * self.Length
         attr.set_value(attr_intk1_read)
    
     def write_k1(self, attr):
         self.debug_stream("In write_k1()")
         attr_k1_write=attr.get_write_value()
-        self.k1 = attr_k1_write
+        self.k1val = attr_k1_write
         #Note that we set the component of the field vector directly here, but
         #calling calculate_fields will in turn set the whole vector, including this component again
         if self.Tilt == 0:
