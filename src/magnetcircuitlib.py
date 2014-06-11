@@ -30,37 +30,43 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho, tilt
     #We set all the field components, not just the allowed one:
     for i in range (0,_maxdim):
 
-        calcfield = np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / (brho*length) 
-        calcfield_norm = calcfield/energy
+        #Given a current we get back k1 * length * BRho
+        #k1 * BRho is the element of fieldB
+        #Divide by BRho to get the normalised field and plain k
+        calcfield = np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length 
+        calcfield_norm = calcfield / brho
 
         if tilt == 0:
             fieldB[i] = calcfield
             fieldBNormalised[i] = calcfield_norm
             if i==allowed_component:
                 #print "Setting this component", fieldB[i] 
-                thiscomponent=fieldB[allowed_component]
+                thiscomponent=fieldBNormalised[allowed_component]
         else:
             fieldA[i] = calcfield 
             fieldANormalised[i] = calcfield_norm 
             if i==allowed_component:
                 #print "Setting this component", fieldA[i]
-                thiscomponent=fieldA[allowed_component]
+                thiscomponent=fieldANormalised[allowed_component]
 
     return thiscomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
 
 def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, tilt, length, energy, fieldA, fieldB):
     
+    #Given k1 * length * BRho (call it intBtimesBRho) we get a current
+    #k1 * BRho is the element of fieldB
+
     #print "In calculate_current, showing conversion data for multipole component ", allowed_component,
     #"\n",fieldsmatrix[allowed_component],
     #"\n",currentsmatrix[allowed_component]
 
     if tilt == 0:
-        requested_field = fieldB[allowed_component]
+        intBtimesBRho = fieldB[allowed_component]*length
     else:
-        requested_field = fieldA[allowed_component]
+        intBtimesBRho = fieldA[allowed_component]*length
         
     #Use numpy to interpolate. We only deal with the allowed component. Assume no need to extrapolate
-    intB = requested_field*brho*length
-    calc_current = np.interp(intB, fieldsmatrix[allowed_component], currentsmatrix[allowed_component])
+
+    calc_current = np.interp(intBtimesBRho, fieldsmatrix[allowed_component], currentsmatrix[allowed_component])
 
     return calc_current

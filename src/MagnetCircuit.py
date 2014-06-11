@@ -114,6 +114,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
         self.allowed_component = -1
         if self.Type == "csrcsbend":
+            #h and vkick also here using small theta. Large theta for bends.
             self.allowed_component = 0
         elif self.Type == "kquad":
             self.allowed_component = 1
@@ -270,13 +271,16 @@ class MagnetCircuit (PyTango.Device_4Impl):
         attr_k1_write=attr.get_write_value()
         self.k1 = attr_k1_write
         #Note that we set the component of the field vector directly here, but
-        #calling calculate_fields (from calculate_current) will in turn set the whole vector, including this component again
+        #calling calculate_fields will in turn set the whole vector, including this component again
         if self.Tilt == 0:
-            self.fieldB[1]  = attr_k1_write
-            self.fieldBNormalised[1]  = attr_k1_write/self.energy
+            self.fieldBNormalised[1]  = attr_k1_write
+            self.fieldB[1]  = attr_k1_write * self.BRho
         else:
-            self.fieldA[1]  = attr_k1_write
-            self.fieldANormalised[1]  = attr_k1_write/self.energy
+           self.fieldANormalised[1]  = attr_k1_write
+           self.fieldA[1]  = attr_k1_write * self.BRho
+
+        print "calling set current for ",  self.fieldBNormalised[1]
+
         self.calc_current \
             = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
         ###########################################################
@@ -428,7 +432,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
              {
                 'description': "field A (skew) normalised components",
 		'label': "e/p A_n",
-                'unit': "m^1-n",
+                'unit': "m^-n",
                 } ],
         'fieldBNormalised':
             [[PyTango.DevFloat,
@@ -437,7 +441,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
              {
                 'description': "field B (normal) normalised components",
 		'label': "e/p B_n",
-                'unit': "m^1-n",
+                'unit': "m^-n",
                 } ],
         'energy':
             [[PyTango.DevFloat,
