@@ -53,31 +53,37 @@ class MagnetCircuit (PyTango.Device_4Impl):
             print >> self.log_fatal, 'Incompatible current and field calibration data'
             sys.exit(1)
 
-        #Make numpy arrays for field and currents for each multipole component. Assume max dimension is _maxdim with 11 measurements.
-        self.fieldsmatrix   = np.zeros(shape=(self._maxdim,11), dtype=float) 
-        self.currentsmatrix = np.zeros(shape=(self._maxdim,11), dtype=float) 
+        #No information corresponds to [""]
+        self.hasCalibData=False
+        if  self.ExcitationCurveCurrents[0] == '' or  self.ExcitationCurveCurrents[0] == 'not set':
+            self.debug_stream("No calibration data")
+        else:
+            self.hasCalibData=True
+            #Make numpy arrays for field and currents for each multipole component. Assume max dimension is _maxdim with 11 measurements.
+            self.fieldsmatrix   = np.zeros(shape=(self._maxdim,11), dtype=float) 
+            self.currentsmatrix = np.zeros(shape=(self._maxdim,11), dtype=float) 
+            
+            #Fill the numpy arrays, but first horrible conversion of list of chars to floats
+            self.debug_stream("Multipole dimension ",  len(self.ExcitationCurveCurrents))
+            for i in range (0,len(self.ExcitationCurveCurrents)):
+                MeasuredFields_l = []    
+                MeasuredCurrents_l = []         
+                #PJB hack since I use a string to start with like "[1,2,3]" No way to store a matrix of floats?
+                if len(self.ExcitationCurveCurrents[i])>0:
+                    self.MeasuredFields_l   =   [float(x) for x in "".join(self.ExcitationCurveFields[i][1:-1]).split(",")]
+                    self.MeasuredCurrents_l =   [float(x) for x in "".join(self.ExcitationCurveCurrents[i][1:-1]).split(",")]
+                    self.currentsmatrix[i]=self.MeasuredCurrents_l
+                    self.fieldsmatrix[i]=self.MeasuredFields_l
+                    
+            #Need to sort in ascending order in order for interpolate to work later
+            self.fieldsmatrix.sort()       
+            self.currentsmatrix.sort() 
 
-        #Fill the numpy arrays, but first horrible conversion of list of chars to floats
-        self.debug_stream("Multipole dimension ",  len(self.ExcitationCurveCurrents))
-        for i in range (0,len(self.ExcitationCurveCurrents)):
-            MeasuredFields_l = []    
-            MeasuredCurrents_l = []         
-            #PJB hack since I use a string to start with like "[1,2,3]" No way to store a matrix of floats?
-            if len(self.ExcitationCurveCurrents[i])>0:
-                self.MeasuredFields_l   =   [float(x) for x in "".join(self.ExcitationCurveFields[i][1:-1]).split(",")]
-                self.MeasuredCurrents_l =   [float(x) for x in "".join(self.ExcitationCurveCurrents[i][1:-1]).split(",")]
-                self.currentsmatrix[i]=self.MeasuredCurrents_l
-                self.fieldsmatrix[i]=self.MeasuredFields_l
-                
-        #Need to sort in ascending order in order for interpolate to work later
-        self.fieldsmatrix.sort()       
-        self.currentsmatrix.sort() 
-
-        #Check if the current is zero for the first entry, force the field to be zero as well
-        for i in range (0,len(self.ExcitationCurveCurrents)):
-            if self.currentsmatrix[i][0] < 0.01:
-               self.currentsmatrix[i][0] = 0.0
-               self.fieldsmatrix[i][0] = 0.0
+            #Check if the current is zero for the first entry, force the field to be zero as well
+            for i in range (0,len(self.ExcitationCurveCurrents)):
+                if self.currentsmatrix[i][0] < 0.01:
+                    self.currentsmatrix[i][0] = 0.0
+                    self.fieldsmatrix[i][0] = 0.0
 
         #Check length, tilt, type of actual magnet devices (should all be the same)
         self.Length=-1.0
@@ -134,11 +140,12 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.fieldB = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
         self.fieldANormalised = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
         self.fieldBNormalised = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
-        self.k1val = -1000
+        self.k1val = -1000.0
         self.scaleField=False
         self.calc_current = -1.0
         self.actual_current = - 1.0
         self.actual_current_quality =  PyTango.AttrQuality.ATTR_VALID
+        self.actual_field_quality =  PyTango.AttrQuality.ATTR_VALID
 
         #Get the PS device and the actual current. If cannot connect to PS device may as well just exit.
         try:
@@ -147,13 +154,14 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.set_state(self.ps_device.State())
 
             #See how the fields are intially.
-            (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
-                = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.ps_device.Current)
+            if self.hasCalibData:
+                (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
+                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.ps_device.Current)
 
-            #To give consistent starting conditions, now calculate the current given these fields
-            #i.e. we calculate back the actual current we just read
-            self.calc_current \
-                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
+                #To give consistent starting conditions, now calculate the current given these fields
+                #i.e. we calculate back the actual current we just read
+                self.calc_current \
+                    = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
 
         except PyTango.DevFailed as e:
             self.debug_stream('Cannot read current from PS ' + self.PowerSupplyProxy) 
@@ -179,8 +187,13 @@ class MagnetCircuit (PyTango.Device_4Impl):
         try:            
             self.set_state(self.ps_device.State())
             self.actual_current =  self.ps_device.Current
-            (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
-                = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.actual_current)
+            if self.hasCalibData:
+                (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
+                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.actual_current)
+            else:
+                self.set_status("No calibration data available, showing PS current only") 
+                self.calc_current =   self.actual_current
+                self.actual_field_quality =  PyTango.AttrQuality.ATTR_INVALID
         except PyTango.DevFailed as e:
             self.actual_current_quality =  PyTango.AttrQuality.ATTR_INVALID
             self.set_state(PyTango.DevState.UNKNOWN)
@@ -202,22 +215,22 @@ class MagnetCircuit (PyTango.Device_4Impl):
     def read_fieldA(self, attr):
         self.debug_stream("In read_fieldA()")
         attr.set_value(self.fieldA)
-        attr.set_quality(self.actual_current_quality)
+        attr.set_quality(self.actual_current_quality or self.actual_field_quality)
 
     def read_fieldB(self, attr):
         self.debug_stream("In read_fieldB()")
         attr.set_value(self.fieldB)
-        attr.set_quality(self.actual_current_quality)
+        attr.set_quality(self.actual_current_quality or self.actual_field_quality)
 
     def read_fieldANormalised(self, attr):
         self.debug_stream("In read_fieldANormalised()")
         attr.set_value(self.fieldANormalised)
-        attr.set_quality(self.actual_current_quality)
+        attr.set_quality(self.actual_current_quality or self.actual_field_quality)
 
     def read_fieldBNormalised(self, attr):
         self.debug_stream("In read_fieldBNormalised()")
         attr.set_value(self.fieldBNormalised)
-        attr.set_quality(self.actual_current_quality)
+        attr.set_quality(self.actual_current_quality or self.actual_field_quality)
 
     def read_energy(self, attr):
         self.debug_stream("In read_energy()")
@@ -233,15 +246,17 @@ class MagnetCircuit (PyTango.Device_4Impl):
         if self.actual_current_quality ==  PyTango.AttrQuality.ATTR_VALID:
             if self.scaleField:
                 self.debug_stream("Energy changed: will recalculate and set current")
-                self.calc_current \
-                    = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
-                ###########################################################
-                #Set the current on the ps
-                self.set_current()
+                if self.hasCalibData:
+                    self.calc_current \
+                        = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
+                    ###########################################################
+                    #Set the current on the ps
+                    self.set_current()
             else:
                 self.debug_stream("Energy changed: will recalculate fields")
-                (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
-                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.actual_current)
+                if self.hasCalibData:
+                    (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
+                        = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.actual_current)
         else:
             attr.set_quality(self.actual_current_quality)
 
@@ -260,35 +275,40 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     def read_k1(self, attr):
         self.debug_stream("In read_k1()")
-        attr_k1_read = self.k1val
-        attr.set_value(attr_k1_read)
-        attr.set_write_value(self.k1val)
+        if self.hasCalibData == False:
+            attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
+        else:
+            attr_k1_read = self.k1val
+            attr.set_value(attr_k1_read)
+            attr.set_write_value(self.k1val)
 
     def read_intk1(self, attr):
-        self.debug_stream("In read_intk1()")
-        attr_intk1_read = self.k1val * self.Length
-        attr.set_value(attr_intk1_read)
+        self.debug_stream("In read_intk1()")  
+        if self.hasCalibData == False:
+            attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
+        else: 
+            attr_intk1_read = self.k1val * self.Length
+            attr.set_value(attr_intk1_read)
    
     def write_k1(self, attr):
-        self.debug_stream("In write_k1()")
-        attr_k1_write=attr.get_write_value()
-        self.k1val = attr_k1_write
-        #Note that we set the component of the field vector directly here, but
-        #calling calculate_fields will in turn set the whole vector, including this component again
-        if self.Tilt == 0:
-            self.fieldBNormalised[1]  = attr_k1_write
-            self.fieldB[1]  = attr_k1_write * self.BRho
-        else:
-           self.fieldANormalised[1]  = attr_k1_write
-           self.fieldA[1]  = attr_k1_write * self.BRho
+        self.debug_stream("In write_k1()")  
+        if self.hasCalibData:
+            attr_k1_write=attr.get_write_value()
+            self.k1val = attr_k1_write
+            #Note that we set the component of the field vector directly here, but
+            #calling calculate_fields will in turn set the whole vector, including this component again
+            if self.Tilt == 0:
+                self.fieldBNormalised[1]  = attr_k1_write
+                self.fieldB[1]  = attr_k1_write * self.BRho
+            else:
+                self.fieldANormalised[1]  = attr_k1_write
+                self.fieldA[1]  = attr_k1_write * self.BRho
 
-        print "calling set current for ",  self.fieldBNormalised[1]
-
-        self.calc_current \
-            = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
-        ###########################################################
-        #Set the current on the ps
-        self.set_current()
+            self.calc_current \
+                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
+            ###########################################################
+            #Set the current on the ps
+            self.set_current()
         
 
     def read_attr_hardware(self, data):
@@ -362,20 +382,20 @@ class MagnetCircuitClass(PyTango.DeviceClass):
         #So now I end up with a list of lists instead. See above for conversion.
         'ExcitationCurveCurrents':
             [PyTango.DevVarStringArray,
-            "Measured calibration currents for each multipole",
-            [ [] ] ],
+             "Measured calibration currents for each multipole",
+             [ "not set" ] ], #do not changed since used to check if data in DB
         'ExcitationCurveFields':
             [PyTango.DevVarStringArray,
             "Measured calibration fields for each multipole",
-            [ [] ] ],
+             [ "not set" ] ],
         'PowerSupplyProxy':
             [PyTango.DevString,
-            "Associated powersupply",
-            [ "not set" ] ],
+             "Associated powersupply",
+             [ "not set" ] ],
         'MagnetProxies':
             [PyTango.DevVarStringArray,
-            "List of magnets on this circuit",
-            [ "not set" ] ],
+             "List of magnets on this circuit",
+             [ "not set" ] ],
         }
 
 

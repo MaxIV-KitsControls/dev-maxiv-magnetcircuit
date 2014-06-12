@@ -1,0 +1,4 @@
+#!/usr/bin/env python
+#device launcher
+from Magnet import main
+main()
