@@ -54,18 +54,16 @@ class Magnet (PyTango.Device_4Impl):
       
         self.FieldQuality  = PyTango.AttrQuality.ATTR_VALID
 
-        #Get proxy to circuit (only ever one?)
+        #Get proxy to circuit (only ever one?). If cannot connect may as well exit since probably misconfigured
         try:
             self.CircuitDev  = PyTango.DeviceProxy(self.CircuitProxies)
-            self.CircuitQuality = PyTango.AttrQuality.ATTR_VALID
             self.status_str = "Connected to circuit device " + self.CircuitProxies
-        except PyTango.DevFailed as e:     
-            self.CircuitDev = None
-            self.debug_stream("Exception connecting to circuit DeviceProxy " + self.CircuitProxies)
-            self.set_state(PyTango.DevState.UNKNOWN)
-            #self.set_status("Cannot connect to circuit device " + self.CircuitProxies + "\n" + self.status_str )
-            self.status_str = "Could not connect to circuit device " + self.CircuitProxies
-            self.CircuitQuality = PyTango.AttrQuality.ATTR_INVALID
+        except PyTango.DevFailed as e:
+            self.debug_stream("Cannot connect to circuit device " + self.CircuitProxies)
+            sys.exit(1)
+
+        #if connected try to read field and state
+        self.get_circuit_state()
 
         #Get attribute proxy to interlock tag in OPC access device
         #This is a vector of strings of the form [device,tag attribute,description]
@@ -78,53 +76,64 @@ class Magnet (PyTango.Device_4Impl):
             self.interlock_attribute = None
             self.TempInterlockQuality = PyTango.AttrQuality.ATTR_INVALID
             self.status_str = self.status_str + "\n" + "No interlock tag specified"
+
+        #check interlocks
+        self.check_interlock()
+
+
+    def check_interlock(self):
+
         #If we gave an interlock property, try to get that attribute
         if  self.interlock_attribute is not None:
             try:
-                self.TempInterlockValue  = PyTango.AttributeProxy(self.interlock_attribute)
+                self.TempInterlockValue  = PyTango.AttributeProxy(self.interlock_attribute).read().value
+                if self.TempInterlockValue == True:
+                    if "Interlock is True" not in  self.status_str:
+                        self.status_str =  self.status_str + "\n" + "Interlock is True! " + self.interlock_attribute
+                    self.set_state(PyTango.DevState.ALARM)  
+
             except PyTango.DevFailed as e:
                 self.debug_stream("Exception getting interlock AttributeProxy ", e)
                 self.TempInterlockQuality = PyTango.AttrQuality.ATTR_INVALID
                 self.status_str =  self.status_str + "\n" + "Cannot read specified interlock tag "
-                            
+
+
+
+    def get_circuit_state(self):
+
+        try:
+            self.set_state(self.CircuitDev.State())
+
+            fieldA_q  = self.CircuitDev.read_attribute("fieldA").quality
+            fieldB_q  = self.CircuitDev.read_attribute("fieldA").quality
+            fieldAN_q = self.CircuitDev.read_attribute("fieldA").quality
+            fieldBN_q = self.CircuitDev.read_attribute("fieldA").quality
+
+            if PyTango.AttrQuality.ATTR_INVALID in [fieldA_q, fieldB_q, fieldAN_q, fieldBN_q]:
+                
+                self.FieldQuality  = PyTango.AttrQuality.ATTR_INVALID
+                if "Fields not calculated by circuit device" not in self.status_str:
+                    self.status_str =  self.status_str + "\n" + "Fields not calculated by circuit device"
+                    
+            else:
+                self.fieldA = (self.CircuitDev.fieldA)
+                self.fieldB = (self.CircuitDev.fieldB)
+                self.fieldANormalised = (self.CircuitDev.fieldANormalised)
+                self.fieldBNormalised = (self.CircuitDev.fieldBNormalised)
+
+        except PyTango.DevFailed as e:
+            self.FieldQuality =  PyTango.AttrQuality.ATTR_INVALID
+            self.debug_stream('Cannot read field from circuit ' + self.PowerSupplyProxy) 
+            if "Cannot read field from circuit" not in self.status_str:
+                self.status_str = self.status_str + "\n" + "Cannot read field from circuit"
+
+        self.set_status(self.status_str)
+                           
 
     def always_executed_hook(self):
         self.debug_stream("In always_excuted_hook()")
-
-        #set state to whatever the circuit state is (which in turn will come from the PS)
-        if self.CircuitDev is None:
-            self.set_state(PyTango.DevState.UNKNOWN)
-            if "Could not connect to circuit device" not in  self.status_str:
-                self.status_str =  self.status_str + "\n" + "Could not connect to circuit device " + self.CircuitProxies
-            self.CircuitQuality = PyTango.AttrQuality.ATTR_INVALID
-        else:
-            try:
-                self.set_state(self.CircuitDev.state())
-
-                fieldA_q  = self.CircuitDev.read_attribute("fieldA").quality
-                fieldB_q  = self.CircuitDev.read_attribute("fieldA").quality
-                fieldAN_q = self.CircuitDev.read_attribute("fieldA").quality
-                fieldBN_q = self.CircuitDev.read_attribute("fieldA").quality
-
-                if fieldA_q == PyTango.AttrQuality.ATTR_INVALID or fieldB_q == PyTango.AttrQuality.ATTR_INVALID or fieldAN_q == PyTango.AttrQuality.ATTR_INVALID or fieldBN_q == PyTango.AttrQuality.ATTR_INVALID:
-                    self.FieldQuality  = PyTango.AttrQuality.ATTR_INVALID
-                    if "Fields not calculated by circuit device" not in self.status_str:
-                        self.status_str =  self.status_str + "\n" + "Fields not calculated by circuit device"
-
-                else:
-                    self.fieldA = (self.CircuitDev.fieldA)
-                    self.fieldB = (self.CircuitDev.fieldB)
-                    self.fieldANormalised = (self.CircuitDev.fieldANormalised)
-                    self.fieldBNormalised = (self.CircuitDev.fieldBNormalised)
-
-            except PyTango.DevFailed as e:
-                self.debug_stream("Exception reading from circuit DeviceProxy ", e)
-                self.set_state(PyTango.DevState.UNKNOWN)
-                if "Could not connect to circuit device" not in  self.status_str:
-                    self.status_str =  self.status_str + "\n" + "Could not connect to circuit device " + self.CircuitProxiesif 
-                self.CircuitQuality = PyTango.AttrQuality.ATTR_INVALID
-
-        self.set_status(self.status_str)
+        self.get_circuit_state()
+        self.check_interlock()
 
     #-----------------------------------------------------------------------------
     #    Magnet read/write attribute methods
@@ -133,25 +142,21 @@ class Magnet (PyTango.Device_4Impl):
     def read_fieldA(self, attr):
         self.debug_stream("In read_fieldA()")
         attr.set_value(self.fieldA)
-        attr.set_quality(self.CircuitQuality)
         attr.set_quality(self.FieldQuality)
 
     def read_fieldB(self, attr):
         self.debug_stream("In read_fieldB()")
         attr.set_value(self.fieldB)
-        attr.set_quality(self.CircuitQuality)
         attr.set_quality(self.FieldQuality)
 
     def read_fieldANormalised(self, attr):
         self.debug_stream("In read_fieldANormalised()")
         attr.set_value(self.fieldANormalised)
-        attr.set_quality(self.CircuitQuality)
         attr.set_quality(self.FieldQuality)
 
     def read_fieldBNormalised(self, attr):
         self.debug_stream("In read_fieldBNormalised()")
         attr.set_value(self.fieldBNormalised)
-        attr.set_quality(self.CircuitQuality)
         attr.set_quality(self.FieldQuality)
 
     def read_temperatureInterlock(self, attr):

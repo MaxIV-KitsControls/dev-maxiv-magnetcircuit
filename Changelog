@@ -4,3 +4,7 @@
 11-06-2014 Paul Bell	
 	* Keep circuit and magnets all in this package. 
 	* v1.0.1
+
+13-06-2014 Paul Bell	
+	* Fixes after initial deployment. More consistent setting of status.
+	* v1.0.2

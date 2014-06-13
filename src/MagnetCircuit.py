@@ -46,6 +46,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
     def init_device(self):
         self.debug_stream("In init_device()")
         self.get_device_properties(self.get_device_class())
+        self.status_str = ""
 
         #Check dimensions of current and field calibration data
         #(Should be n arrays of field values for n arrays of current values)
@@ -65,6 +66,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
             
             #Fill the numpy arrays, but first horrible conversion of list of chars to floats
             self.debug_stream("Multipole dimension ",  len(self.ExcitationCurveCurrents))
+            print self.ExcitationCurveCurrents
+
             for i in range (0,len(self.ExcitationCurveCurrents)):
                 MeasuredFields_l = []    
                 MeasuredCurrents_l = []         
@@ -119,7 +122,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #which of course is row 0-3 in our numpy array
 
         self.allowed_component = -1
-        if self.Type == "csrcsbend":
+        if self.Type in ["csrcsbend","hkick","vkick"]:
             #h and vkick also here using small theta. Large theta for bends.
             self.allowed_component = 0
         elif self.Type == "kquad":
@@ -144,28 +147,52 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.scaleField=False
         self.calc_current = -1.0
         self.actual_current = - 1.0
-        self.actual_current_quality =  PyTango.AttrQuality.ATTR_VALID
-        self.actual_field_quality =  PyTango.AttrQuality.ATTR_VALID
+        self.current_quality =  PyTango.AttrQuality.ATTR_VALID
+        self.field_quality =  PyTango.AttrQuality.ATTR_VALID
 
-        #Get the PS device and the actual current. If cannot connect to PS device may as well just exit.
+        #Get the PS device and the actual current. If cannot connect to PS device may as well just exit since probably misconfigured properties.
         try:
-            self.ps_device = PyTango.DeviceProxy(self.PowerSupplyProxy)        
-            self.actual_current =  self.ps_device.Current
+            self.ps_device = PyTango.DeviceProxy(self.PowerSupplyProxy)             
+            self.status_str = "Connected to PS device " + self.PowerSupplyProxy
+        except PyTango.DevFailed as e:
+            self.debug_stream('Cannot connect to PS ' + self.PowerSupplyProxy) 
+            sys.exit(1)
+
+        #if connected try to read current and state
+        self.get_ps_state()
+
+        #To give consistent starting conditions, now calculate the current given these fields
+        #i.e. we calculate back the actual current we just read
+        #Assuming that we have the calib data. 
+        if self.hasCalibData:
+            self.calc_current \
+                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
+
+
+    def get_ps_state(self):
+
+        try:
             self.set_state(self.ps_device.State())
 
-            #See how the fields are intially.
+            self.actual_current =  self.ps_device.Current
+
             if self.hasCalibData:
                 (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
                     = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.ps_device.Current)
 
-                #To give consistent starting conditions, now calculate the current given these fields
-                #i.e. we calculate back the actual current we just read
-                self.calc_current \
-                    = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
+            else:
+                if "No calibration data available" not in self.status_str:
+                    self.status_str = self.status_str + "\n" + "No calibration data available, showing PS current only" 
+                self.calc_current =   self.actual_current
+                self.field_quality =  PyTango.AttrQuality.ATTR_INVALID
 
         except PyTango.DevFailed as e:
+            self.current_quality =  PyTango.AttrQuality.ATTR_INVALID
             self.debug_stream('Cannot read current from PS ' + self.PowerSupplyProxy) 
-            sys.exit(1)
+            if "Cannot read current on PS" not in self.status_str:
+                self.status_str  = self.status_str + "\n" + "Cannot read current on PS" + self.PowerSupplyProxy 
+
+        self.set_status(self.status_str) 
 
     def calculate_brho(self):
         #Bρ = sqrt(T(T+2M0)/(qc0) where M0 = rest mass of the electron in MeV, q = 1 and c0 = speed of light Mm/s (mega m!) Energy is in eV to start.
@@ -184,21 +211,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.debug_stream("In always_excuted_hook()")
         #Always recalc fields for actual current. If the current changes we need to check how fields change.
         #NB if we change the i'th component we need to see how other components change as a result
-        try:            
-            self.set_state(self.ps_device.State())
-            self.actual_current =  self.ps_device.Current
-            if self.hasCalibData:
-                (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
-                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.actual_current)
-            else:
-                self.set_status("No calibration data available, showing PS current only") 
-                self.calc_current =   self.actual_current
-                self.actual_field_quality =  PyTango.AttrQuality.ATTR_INVALID
-        except PyTango.DevFailed as e:
-            self.actual_current_quality =  PyTango.AttrQuality.ATTR_INVALID
-            self.set_state(PyTango.DevState.UNKNOWN)
-            self.set_status("Cannot read current on PS" + self.PowerSupplyProxy) 
-
+        self.get_ps_state()
 
     #-----------------------------------------------------------------------------
     #    MagnetCircuit read/write attribute methods
@@ -206,31 +219,36 @@ class MagnetCircuit (PyTango.Device_4Impl):
     def read_currentCalculated(self, attr):
         self.debug_stream("In read_currentCalculated()")
         attr.set_value(self.calc_current)
+        attr.set_quality(self.field_quality)
 
     def read_currentActual(self, attr):
         self.debug_stream("In read_currentActual()")
         attr.set_value(self.actual_current)
-        attr.set_quality(self.actual_current_quality)
+        attr.set_quality(self.current_quality)
 
     def read_fieldA(self, attr):
         self.debug_stream("In read_fieldA()")
         attr.set_value(self.fieldA)
-        attr.set_quality(self.actual_current_quality or self.actual_field_quality)
+        attr.set_quality(self.current_quality)
+        attr.set_quality(self.field_quality)
 
     def read_fieldB(self, attr):
         self.debug_stream("In read_fieldB()")
         attr.set_value(self.fieldB)
-        attr.set_quality(self.actual_current_quality or self.actual_field_quality)
+        attr.set_quality(self.current_quality)
+        attr.set_quality(self.field_quality)
 
     def read_fieldANormalised(self, attr):
         self.debug_stream("In read_fieldANormalised()")
         attr.set_value(self.fieldANormalised)
-        attr.set_quality(self.actual_current_quality or self.actual_field_quality)
+        attr.set_quality(self.current_quality)
+        attr.set_quality(self.field_quality)
 
     def read_fieldBNormalised(self, attr):
         self.debug_stream("In read_fieldBNormalised()")
         attr.set_value(self.fieldBNormalised)
-        attr.set_quality(self.actual_current_quality or self.actual_field_quality)
+        attr.set_quality(self.current_quality)
+        attr.set_quality(self.field_quality)
 
     def read_energy(self, attr):
         self.debug_stream("In read_energy()")
@@ -243,7 +261,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.calculate_brho()
         #If energy changes, current or field must also change            
         #Only do something if the current from the PS is known
-        if self.actual_current_quality ==  PyTango.AttrQuality.ATTR_VALID:
+        if self.current_quality ==  PyTango.AttrQuality.ATTR_VALID:
             if self.scaleField:
                 self.debug_stream("Energy changed: will recalculate and set current")
                 if self.hasCalibData:
@@ -258,7 +276,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
                     (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
                         = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.actual_current)
         else:
-            attr.set_quality(self.actual_current_quality)
+            attr.set_quality(self.current_quality)
 
     def read_scaleFieldByEnergy(self, attr):
         self.debug_stream("In read_scaleFieldByEnergy()")
