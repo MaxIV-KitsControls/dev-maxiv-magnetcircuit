@@ -8,3 +8,7 @@
 13-06-2014 Paul Bell	
 	* Fixes after initial deployment. More consistent setting of status.
 	* v1.0.2
+
+17-06-2014 Paul Bell	
+	* Include polarity and orientation properties
+	* v1.0.3

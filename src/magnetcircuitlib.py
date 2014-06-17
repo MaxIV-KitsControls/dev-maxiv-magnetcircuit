@@ -16,7 +16,7 @@ from math import sqrt
 
 _maxdim = 10 #Maximum number of multipole components
 
-def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho, tilt, length, energy, actual_current):
+def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  polarity, orientation, tilt, length, energy, actual_current):
 
     fieldA = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
     fieldB = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
@@ -33,7 +33,7 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho, tilt
         #Given a current we get back k1 * length * BRho
         #k1 * BRho is the element of fieldB
         #Divide by BRho to get the normalised field and plain k
-        calcfield = np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length 
+        calcfield = -1.0 * polarity * orientation * np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length 
         calcfield_norm = calcfield / brho
 
         if tilt == 0:
@@ -51,7 +51,7 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho, tilt
 
     return thiscomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
 
-def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, tilt, length, energy, fieldA, fieldB):
+def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, polarity, orientation, tilt, length, energy, fieldA, fieldB):
     
     #Given k1 * length * BRho (call it intBtimesBRho) we get a current
     #k1 * BRho is the element of fieldB
@@ -61,9 +61,9 @@ def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, til
     #"\n",currentsmatrix[allowed_component]
 
     if tilt == 0:
-        intBtimesBRho = fieldB[allowed_component]*length
+        intBtimesBRho = fieldB[allowed_component]*length * polarity * orientation * -1.0
     else:
-        intBtimesBRho = fieldA[allowed_component]*length
+        intBtimesBRho = fieldA[allowed_component]*length * polarity * orientation * -1.0
         
     #Use numpy to interpolate. We only deal with the allowed component. Assume no need to extrapolate
 

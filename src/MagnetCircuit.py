@@ -91,23 +91,33 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #Check length, tilt, type of actual magnet devices (should all be the same)
         self.Length=-1.0
         self.Type=""
-        self.Tilt=-1.0
+        self.Tilt=-1
+        self.Polarity=1
+        self.Orientation=1
         for (i, magnet_device_name) in enumerate(self.MagnetProxies):
             try:
                 magnet_device = PyTango.DeviceProxy(magnet_device_name)
                 newlength = float(magnet_device.get_property("Length")["Length"][0]) #is this really how to read properties?
                 newtilt   = int(magnet_device.get_property("Tilt")["Tilt"][0])  
                 newtype   = magnet_device.get_property("Type")["Type"][0]
+                newpolarity    = int(magnet_device.get_property("Polarity")["Polarity"][0])  
+                neworientation = int(magnet_device.get_property("Orientation")["Orientation"][0])  
                 if i == 0:
                     self.Length = newlength
                     self.Type   = newtype
                     self.Tilt   = newtilt
+                    self.Polarity    = newpolarity
+                    self.Orientation = neworientation
                 if self.Length != newlength:
                     print >> self.log_fatal, 'Found magnets of different length on same circuit', self.Length, newlength, magnet_device_name
                 if self.Type   != newtype:
                     print >> self.log_fatal, 'Found magnets of different type on same circuit', self.Type, newtype, magnet_device_name
                 if self.Tilt   != newtilt:
                     print >> self.log_fatal, 'Found magnets of different tilt on same circuit', self.Tilt, newtilt, magnet_device_name
+                if self.Polarity     != newpolarity:
+                    print >> self.log_fatal, 'Found magnets of different polarity on same circuit', self.Polarity, newpolarity, magnet_device_name
+                if self.Orientation  != neworientation:
+                    print >> self.log_fatal, 'Found magnets of different orientation on same circuit', self.Orientation, neworientation, magnet_device_name
             except PyTango.DevFailed as e:
                 print >> self.log_fatal, 'Cannot get information from magnet device ' + magnet_device_name
                 sys.exit(1)
@@ -115,6 +125,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.debug_stream("Magnet length is ", self.Length)
         self.debug_stream("Magnet type is   ", self.Type)     
         self.debug_stream("Magnet tilt is   ", self.Tilt)
+        self.debug_stream("Magnet polarity is     ", self.Polarity)
+        self.debug_stream("Magnet orientation is  ", self.Orientation)
 
         #The magnet type determines which row in the numpy array we are interested in to control
         #Note that in the multipole expansion we have:
@@ -166,7 +178,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #Assuming that we have the calib data. 
         if self.hasCalibData:
             self.calc_current \
-                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
+                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
 
 
     def get_ps_state(self):
@@ -178,7 +190,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
             if self.hasCalibData:
                 (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
-                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.ps_device.Current)
+                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy, self.ps_device.Current)
 
             else:
                 if "No calibration data available" not in self.status_str:
@@ -266,7 +278,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 self.debug_stream("Energy changed: will recalculate and set current")
                 if self.hasCalibData:
                     self.calc_current \
-                        = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
+                        = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
                     ###########################################################
                     #Set the current on the ps
                     self.set_current()
@@ -274,7 +286,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 self.debug_stream("Energy changed: will recalculate fields")
                 if self.hasCalibData:
                     (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
-                        = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy, self.actual_current)
+                        = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy, self.actual_current)
         else:
             attr.set_quality(self.current_quality)
 
@@ -323,7 +335,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 self.fieldA[1]  = attr_k1_write * self.BRho
 
             self.calc_current \
-                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
+                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
             ###########################################################
             #Set the current on the ps
             self.set_current()

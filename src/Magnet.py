@@ -190,10 +190,18 @@ class MagnetClass(PyTango.DeviceClass):
             [PyTango.DevFloat,
             "Length",
             [ 0.0 ] ],
+        'Polarity':
+            [PyTango.DevShort,
+            "Polarity",
+            [ 1 ] ],
+        'Orientation':
+            [PyTango.DevShort,
+            "Orientation",
+            [ 1 ] ],
         'Tilt':
             [PyTango.DevShort,
             "Tilt",
-            [ 0.0 ] ],
+            [ 0 ] ],
         'Type':
             [PyTango.DevString,
             "Type",
