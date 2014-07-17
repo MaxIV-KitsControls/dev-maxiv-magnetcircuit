@@ -72,10 +72,13 @@ class MagnetCircuit (PyTango.Device_4Impl):
     def init_device(self):
         self.debug_stream("In init_device()")
         self.get_device_properties(self.get_device_class())
-        self.status_str = ""
+        self.status_str_ps = ""
+        self.status_str_cal = ""
+        self.status_str_cyc = ""
         self.cyclingphase = "---"
         self.cyclingallowed = True
-             
+        self.iscycling = False
+
         #Check dimensions of current and field calibration data
         #(Should be n arrays of field values for n arrays of current values)
         if  len(self.ExcitationCurveCurrents) != len(self.ExcitationCurveFields):
@@ -192,7 +195,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #Get the PS device and the actual current. If cannot connect to PS device may as well just exit since probably misconfigured properties.
         try:
             self.ps_device = PyTango.DeviceProxy(self.PowerSupplyProxy)             
-            self.status_str = "Connected to PS device " + self.PowerSupplyProxy
+            self.status_str_ps = "Connected to PS device " + self.PowerSupplyProxy
         except PyTango.DevFailed as e:
             self.debug_stream('Cannot connect to PS ' + self.PowerSupplyProxy) 
             sys.exit(1)
@@ -214,9 +217,10 @@ class MagnetCircuit (PyTango.Device_4Impl):
         maxcurrent_s = self.ps_device.get_attribute_config("Current").max_value
         mincurrent_s = self.ps_device.get_attribute_config("Current").min_value
         if maxcurrent_s == 'Not specified' or mincurrent_s == 'Not specified':
-            print "current limits not specified, cannot do cycling"
+            self.debug_stream("Current limits not specified, cannot do cycling")
             #cycling command should not be allowed
             self.cyclingallowed = False 
+            self._cycler = None
         #! We assume if there are limits then they are good!
         else:
             maxcurrent = float(maxcurrent_s)
@@ -225,31 +229,29 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     def get_ps_state(self):
 
+        self.status_str_cal = ""
         try:
             self.set_state(self.ps_device.State())
 
             self.actual_current =  self.ps_device.Current
-            #xxx
-            #self.calc_current =   self.actual_current
+
+            #Just assume the calculated current is whatever we wrote to the ps device
             self.calc_current =  self.ps_device.read_attribute("Current").w_value
 
             if self.hasCalibData:
                 (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
                     = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy, self.actual_current)
+                self.status_str_cal = "Field-current calibration data available" 
 
             else:
-                if "No calibration data available" not in self.status_str:
-                    self.status_str = self.status_str + "\n" + "No calibration data available, showing PS current only" 
+                self.status_str_cal = "No calibration data available, showing PS current only" 
                 self.calc_current =   self.actual_current
                 self.field_quality =  PyTango.AttrQuality.ATTR_INVALID
 
         except PyTango.DevFailed as e:
             self.current_quality =  PyTango.AttrQuality.ATTR_INVALID
             self.debug_stream('Cannot read current from PS ' + self.PowerSupplyProxy) 
-            if "Cannot read current on PS" not in self.status_str:
-                self.status_str  = self.status_str + "\n" + "Cannot read current on PS" + self.PowerSupplyProxy 
-
-        self.set_status(self.status_str) 
+            self.status_str_cal = "Cannot read current on PS" + self.PowerSupplyProxy 
 
     def calculate_brho(self):
         #Bρ = sqrt(T(T+2M0)/(qc0) where M0 = rest mass of the electron in MeV, q = 1 and c0 = speed of light Mm/s (mega m!) Energy is in eV to start.
@@ -261,8 +263,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
         try:
             self.ps_device.write_attribute("Current", self.calc_current)
         except PyTango.DevFailed as e:
-            self.set_state(PyTango.DevState.ALARM)
-            self.set_status("Cannot set current on PS" + self.PowerSupplyProxy) 
+            self.set_state(PyTango.DevState.ALARM)            
+            self.status_str_ps = "Cannot set current on PS" + self.PowerSupplyProxy 
 
     def always_executed_hook(self):
         self.debug_stream("In always_excuted_hook()")
@@ -274,6 +276,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.cyclingphase  = self._cycler.phase
         else:
             self.cyclingphase  = "Cycling not permitted"
+
+
+        self.set_status(self.status_str_ps + "\n" + self.status_str_cal + "\nCycling status: " +  self.cyclingphase) 
 
     #-----------------------------------------------------------------------------
     #    MagnetCircuit read/write attribute methods
@@ -392,8 +397,13 @@ class MagnetCircuit (PyTango.Device_4Impl):
         
     def read_CyclingStatus(self, attr):
         self.debug_stream("In read_CyclingStatus()")
-        attr_CyclingStatus_read = "CYCLING STATUS: " + self.cyclingphase
+        attr_CyclingStatus_read = self.cyclingphase
         attr.set_value(attr_CyclingStatus_read)
+
+    def read_CyclingState(self, attr):
+        self.debug_stream("In read_CyclingState()")
+        attr_CyclingState_read = self.iscycling
+        attr.set_value(attr_CyclingState_read)
 
     def read_attr_hardware(self, data):
         self.debug_stream("In read_attr_hardware()")
@@ -431,16 +441,20 @@ class MagnetCircuit (PyTango.Device_4Impl):
     def StartCycle(self):
         self.debug_stream("In StartCycle()")
         self._cycler.cycling= True
+        self.iscycling = True
         
     def StopCycle(self):
         self.debug_stream("In StopCycle()")
         self._cycler.cycling= False
+        self.iscycling = False
 
     def is_StartCycle_allowed(self):
-        return self.cyclingallowed 
+        allowed = self.cyclingallowed and not self.iscycling
+        return allowed
 
     def is_StopCycle_allowed(self):
-        return  self._cycler.cycling
+        allowed = self.iscycling
+        return  allowed
 
 class MagnetCircuitClass(PyTango.DeviceClass):
 
@@ -510,7 +524,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
           PyTango.READ],
          {
              'description': "actual current on powersupply",
-            'label': "actual current current",
+            'label': "actual current",
              'unit': "A",
          } ],
         'fieldA':
@@ -583,6 +597,14 @@ class MagnetCircuitClass(PyTango.DeviceClass):
          {
              'description': "Status of cycling procedure",
              'label': "Cycling Status",
+         } ],
+        'CyclingState':
+        [[PyTango.DevBoolean,
+          PyTango.SCALAR,
+          PyTango.READ],
+         {
+             'description': "State of cycling procedure",
+             'label': "Cycling State",
          } ]
     }
 
