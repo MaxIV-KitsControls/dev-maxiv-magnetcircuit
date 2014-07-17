@@ -1,0 +1,1 @@
+from magnetcycling import MagnetCycling

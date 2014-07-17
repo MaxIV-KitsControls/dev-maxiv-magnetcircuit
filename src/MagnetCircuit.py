@@ -29,6 +29,32 @@ import sys
 import numpy as np
 from math import sqrt
 from magnetcircuitlib import calculate_fields, calculate_current
+from cycling_statemachine.magnetcycling import MagnetCycling
+
+
+class Wrapped_PS_Device(object):
+
+    #pass ps device
+    def __init__(self, psdev):
+        self.psdev  = psdev
+
+    def setCurrent(self, value):
+        self.psdev.write_attribute("Current", value)
+
+    #def getCurrent(self):
+    #    return self.psdev.read_attribute("Current").w_value
+
+    def isOn(self):
+        if self.psdev.state() in [PyTango.DevState.ON]:
+            return True
+        else:
+            return False
+
+    def isMoving(self):
+        if self.psdev.state() in [PyTango.DevState.MOVING]:
+            return True
+        else:
+            return False
 
 class MagnetCircuit (PyTango.Device_4Impl):
 
@@ -47,7 +73,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.debug_stream("In init_device()")
         self.get_device_properties(self.get_device_class())
         self.status_str = ""
-
+        self.cyclingphase = "---"
+        self.cyclingallowed = True
+             
         #Check dimensions of current and field calibration data
         #(Should be n arrays of field values for n arrays of current values)
         if  len(self.ExcitationCurveCurrents) != len(self.ExcitationCurveFields):
@@ -180,6 +208,21 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.calc_current \
                 = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
 
+        #Finally set up cycling machinery
+        self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
+        #The cycling varies the current from min and max a number of times. 
+        #Need to get the current limits from the PS device; number of iterations and wait time can be properties
+        maxcurrent_s = self.ps_device.get_attribute_config("Current").max_value
+        mincurrent_s = self.ps_device.get_attribute_config("Current").min_value
+        if maxcurrent_s == 'Not specified' or mincurrent_s == 'Not specified':
+            print "current limits not specified, cannot do cycling"
+            #cycling command should not be allowed
+            self.cyclingallowed = False 
+        #! We assume if there are limits then they are good!
+        else:
+            maxcurrent = float(maxcurrent_s)
+            mincurrent = float(mincurrent_s)
+            self._cycler =  MagnetCycling(self.wrapped_ps_device, maxcurrent, mincurrent, 5.0, 4)
 
     def get_ps_state(self):
 
@@ -187,10 +230,13 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.set_state(self.ps_device.State())
 
             self.actual_current =  self.ps_device.Current
+            #xxx
+            #self.calc_current =   self.actual_current
+            self.calc_current =  self.ps_device.read_attribute("Current").w_value
 
             if self.hasCalibData:
                 (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
-                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy, self.ps_device.Current)
+                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy, self.actual_current)
 
             else:
                 if "No calibration data available" not in self.status_str:
@@ -224,6 +270,11 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #Always recalc fields for actual current. If the current changes we need to check how fields change.
         #NB if we change the i'th component we need to see how other components change as a result
         self.get_ps_state()
+        #check phase of magnet cycling (if never started any cycling, will return ---)
+        if self.cyclingallowed:
+            self.cyclingphase  = self._cycler.phase
+        else:
+            self.cyclingphase  = "Cycling not permitted"
 
     #-----------------------------------------------------------------------------
     #    MagnetCircuit read/write attribute methods
@@ -340,6 +391,10 @@ class MagnetCircuit (PyTango.Device_4Impl):
             #Set the current on the ps
             self.set_current()
         
+    def read_CyclingStatus(self, attr):
+        self.debug_stream("In read_CyclingStatus()")
+        attr_CyclingStatus_read = "CYCLING STATUS: " + self.cyclingphase
+        attr.set_value(attr_CyclingStatus_read)
 
     def read_attr_hardware(self, data):
         self.debug_stream("In read_attr_hardware()")
@@ -374,20 +429,19 @@ class MagnetCircuit (PyTango.Device_4Impl):
     #    MagnetCircuit command methods
     #-----------------------------------------------------------------------------
 
-    #def On(self):
-    #    self.debug_stream("In On()")
-    #    self.set_state(PyTango.DevState.ON)   
+    def StartCycle(self):
+        self.debug_stream("In StartCycle()")
+        self._cycler.cycling= True
+        
+    def StopCycle(self):
+        self.debug_stream("In StopCycle()")
+        self._cycler.cycling= False
 
-    #def is_On_allowed(self):
-    #     return True
+    def is_StartCycle_allowed(self):
+        return self.cyclingallowed 
 
-    #def Off(self):
-    #    self.debug_stream("In Off()")
-    #    self.set_state(PyTango.DevState.OFF)   
-
-    #def is_Off_allowed(self):
-    #    return True
-
+    def is_StopCycle_allowed(self):
+        return  self._cycler.cycling
 
 class MagnetCircuitClass(PyTango.DeviceClass):
 
@@ -431,99 +485,107 @@ class MagnetCircuitClass(PyTango.DeviceClass):
 
     #Command definitions  
     cmd_list = {
-        #'On':
-        #    [[PyTango.DevVoid, ""],
-        #    [PyTango.DevBoolean, ""]],
-        #'Off':
-        #    [[PyTango.DevVoid, ""],
-        #    [PyTango.DevBoolean, ""]],
-        }
+        'StartCycle':
+             [[PyTango.DevVoid, ""],
+              [PyTango.DevBoolean, ""]],
+        'StopCycle':
+            [[PyTango.DevVoid, ""],
+             [PyTango.DevBoolean, ""]],
+    }
 
 
     #Attribute definitions
     attr_list = {
         'currentCalculated':
-            [[PyTango.DevFloat,
-              PyTango.SCALAR,
-              PyTango.READ],
-             {
-                'description': "calculated current",
-		'label': "calculated current",
-                'unit': "A",
-                } ],
+        [[PyTango.DevFloat,
+          PyTango.SCALAR,
+          PyTango.READ],
+         {
+             'description': "calculated current",
+             'label': "calculated current",
+            'unit': "A",
+         } ],
         'currentActual':
-            [[PyTango.DevFloat,
-              PyTango.SCALAR,
-              PyTango.READ],
-             {
-                'description': "actual current on powersupply",
-		'label': "actual current current",
-                'unit': "A",
-                } ],
+        [[PyTango.DevFloat,
+          PyTango.SCALAR,
+          PyTango.READ],
+         {
+             'description': "actual current on powersupply",
+            'label': "actual current current",
+             'unit': "A",
+         } ],
         'fieldA':
-            [[PyTango.DevFloat,
-              PyTango.SPECTRUM,
-              PyTango.READ, 10],
-             {
-                'description': "field A (skew) components",
-		'label': "A_n",
-                'unit': "T m^1-n",
-                } ],
+        [[PyTango.DevFloat,
+          PyTango.SPECTRUM,
+        PyTango.READ, 10],
+         {
+             'description': "field A (skew) components",
+             'label': "A_n",
+             'unit': "T m^1-n",
+         } ],
         'fieldB':
-            [[PyTango.DevFloat,
-              PyTango.SPECTRUM,
-              PyTango.READ, 10],
-             {
-                'description': "field B (normal) components",
-		'label': "B_n",
-                'unit': "T m^1-n",
-                } ],
+        [[PyTango.DevFloat,
+          PyTango.SPECTRUM,
+          PyTango.READ, 10],
+         {
+             'description': "field B (normal) components",
+             'label': "B_n",
+             'unit': "T m^1-n",
+        } ],
         'fieldANormalised':
-            [[PyTango.DevFloat,
-              PyTango.SPECTRUM,
-              PyTango.READ, 10],
-             {
-                'description': "field A (skew) normalised components",
-		'label': "e/p A_n",
-                'unit': "m^-n",
-                } ],
+        [[PyTango.DevFloat,
+          PyTango.SPECTRUM,
+          PyTango.READ, 10],
+         {
+             'description': "field A (skew) normalised components",
+             'label': "e/p A_n",
+             'unit': "m^-n",
+         } ],
         'fieldBNormalised':
-            [[PyTango.DevFloat,
-              PyTango.SPECTRUM,
-              PyTango.READ, 10],
-             {
-                'description': "field B (normal) normalised components",
-		'label': "e/p B_n",
-                'unit': "m^-n",
-                } ],
+        [[PyTango.DevFloat,
+          PyTango.SPECTRUM,
+          PyTango.READ, 10],
+         {
+             'description': "field B (normal) normalised components",
+             'label': "e/p B_n",
+             'unit': "m^-n",
+        } ],
         'energy':
-            [[PyTango.DevFloat,
-              PyTango.SCALAR,
-              PyTango.READ_WRITE],
-             {
-                'description': "electron energy",
-		'label': "electron energy",
-                'unit': "eV",
-                } ],
+        [[PyTango.DevFloat,
+          PyTango.SCALAR,
+          PyTango.READ_WRITE],
+         {
+             'description': "electron energy",
+             'label': "electron energy",
+             'unit': "eV",
+         } ],
         'scaleFieldByEnergy':
-            [[PyTango.DevBoolean,
-              PyTango.SCALAR,
-              PyTango.READ_WRITE],
-             {
-                'description': "option to scale field by energy",
-		'label': "scale field by energy",
-                'unit': "T/F",
-                } ],
+        [[PyTango.DevBoolean,
+        PyTango.SCALAR,
+          PyTango.READ_WRITE],
+         {
+             'description': "option to scale field by energy",
+             'label': "scale field by energy",
+             'unit': "T/F",
+         } ],
         'BRho':
-            [[PyTango.DevFloat,
-              PyTango.SCALAR,
-              PyTango.READ],
-             {
-                'description': "b.rho conversion factor",
-		'label': "b.rho",
-                'unit': "eV s m^1",
-                } ],
-        }
+        [[PyTango.DevFloat,
+          PyTango.SCALAR,
+          PyTango.READ],
+         {
+             'description': "b.rho conversion factor",
+             'label': "b.rho",
+             'unit': "eV s m^1",
+         } ],
+        'CyclingStatus':
+        [[PyTango.DevString,
+          PyTango.SCALAR,
+          PyTango.READ],
+         {
+             'description': "Status of cycling procedure",
+             'label': "Cycling Status",
+         } ]
+    }
 
 
 def main():

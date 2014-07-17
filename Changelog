@@ -12,3 +12,7 @@
 17-06-2014 Paul Bell	
 	* Include polarity and orientation properties
 	* v1.0.3
+
+17-07-2014 Paul Bell	
+	* Include cycling via a state machine, tests not finished
+	* v1.0.4
