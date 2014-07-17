@@ -16,3 +16,7 @@
 17-07-2014 Paul Bell	
 	* Include cycling via a state machine, tests not finished
 	* v1.0.4
+
+18-07-2014 Paul Bell	
+	* Basic test of state machine, improved state and status reporting, push state change events
+	* v1.0.5
