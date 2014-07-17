@@ -93,8 +93,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.currentsmatrix = np.zeros(shape=(self._maxdim,11), dtype=float) 
             
             #Fill the numpy arrays, but first horrible conversion of list of chars to floats
-            self.debug_stream("Multipole dimension ",  len(self.ExcitationCurveCurrents))
-            print self.ExcitationCurveCurrents
+            self.debug_stream("Multipole dimension %d ",  len(self.ExcitationCurveCurrents))
 
             for i in range (0,len(self.ExcitationCurveCurrents)):
                 MeasuredFields_l = []    
@@ -150,11 +149,11 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 print >> self.log_fatal, 'Cannot get information from magnet device ' + magnet_device_name
                 sys.exit(1)
 
-        self.debug_stream("Magnet length is ", self.Length)
-        self.debug_stream("Magnet type is   ", self.Type)     
-        self.debug_stream("Magnet tilt is   ", self.Tilt)
-        self.debug_stream("Magnet polarity is     ", self.Polarity)
-        self.debug_stream("Magnet orientation is  ", self.Orientation)
+        self.debug_stream("Magnet length is %f ", self.Length)
+        self.debug_stream("Magnet type is %s  ", self.Type)     
+        self.debug_stream("Magnet tilt is %d  ", self.Tilt)
+        self.debug_stream("Magnet polarity is %d    ", self.Polarity)
+        self.debug_stream("Magnet orientation is %d ", self.Orientation)
 
         #The magnet type determines which row in the numpy array we are interested in to control
         #Note that in the multipole expansion we have:
@@ -258,7 +257,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     def set_current(self):
         #Set the current on the ps
-        self.debug_stream("SETTING CURRENT ON THE PS TO: ", self.calc_current)
+        self.debug_stream("SETTING CURRENT ON THE PS TO: %f ", self.calc_current)
         try:
             self.ps_device.write_attribute("Current", self.calc_current)
         except PyTango.DevFailed as e:

@@ -44,9 +44,11 @@ class Magnet (PyTango.Device_4Impl):
         self.debug_stream("In init_device()")
         self.get_device_properties(self.get_device_class())
 
-        self.debug_stream("Circuit device proxy: ", self.CircuitProxies)
+        self.debug_stream("Circuit device proxy: %s ", self.CircuitProxies)
 
-        self.status_str = ""
+        self.status_str_1 = ""
+        self.status_str_2 = ""
+        self.status_str_3 = ""
         self.fieldA           = []
         self.fieldANormalised = []
         self.fieldB           = []
@@ -57,7 +59,7 @@ class Magnet (PyTango.Device_4Impl):
         #Get proxy to circuit (only ever one?). If cannot connect may as well exit since probably misconfigured
         try:
             self.CircuitDev  = PyTango.DeviceProxy(self.CircuitProxies)
-            self.status_str = "Connected to circuit device " + self.CircuitProxies
+            self.status_str_1 = "Connected to circuit device " + self.CircuitProxies
         except PyTango.DevFailed as e:
             self.debug_stream("Cannot connect to circuit device " + self.CircuitProxies)
             sys.exit(1)
@@ -75,7 +77,7 @@ class Magnet (PyTango.Device_4Impl):
         except Exception as e:
             self.interlock_attribute = None
             self.TempInterlockQuality = PyTango.AttrQuality.ATTR_INVALID
-            self.status_str = self.status_str + "\n" + "No interlock tag specified"
+            self.status_str_1 = self.status_str_1 + "\n" + "No interlock tag specified"
 
         #check interlocks
         self.check_interlock()
@@ -83,24 +85,27 @@ class Magnet (PyTango.Device_4Impl):
 
     def check_interlock(self):
 
+        self.status_str_2 = ""
         #If we gave an interlock property, try to get that attribute
         if  self.interlock_attribute is not None:
             try:
                 self.TempInterlockValue  = PyTango.AttributeProxy(self.interlock_attribute).read().value
                 if self.TempInterlockValue == True:
-                    if "Interlock is True" not in  self.status_str:
-                        self.status_str =  self.status_str + "\n" + "Interlock is True! " + self.interlock_attribute
+                    self.status_str_2 = "Interlock is True! " + self.interlock_attribute + " (" + self.TemperatureInterlock[2] + ")"
                     self.set_state(PyTango.DevState.ALARM)  
+                else:
+                    self.status_str_2 = "No Interlock"
 
             except PyTango.DevFailed as e:
                 self.debug_stream("Exception getting interlock AttributeProxy ", e)
                 self.TempInterlockQuality = PyTango.AttrQuality.ATTR_INVALID
-                self.status_str =  self.status_str + "\n" + "Cannot read specified interlock tag "
+                self.status_str_2 = "Cannot read specified interlock tag "
 
 
 
     def get_circuit_state(self):
 
+        self.status_str_3 = ""
         try:
             self.set_state(self.CircuitDev.State())
 
@@ -112,23 +117,22 @@ class Magnet (PyTango.Device_4Impl):
             if PyTango.AttrQuality.ATTR_INVALID in [fieldA_q, fieldB_q, fieldAN_q, fieldBN_q]:
                 
                 self.FieldQuality  = PyTango.AttrQuality.ATTR_INVALID
-                if "Fields not calculated by circuit device" not in self.status_str:
-                    self.status_str =  self.status_str + "\n" + "Fields not calculated by circuit device"
+                self.status_str_3 =  "Fields not calculated by circuit device"
                     
             else:
                 self.fieldA = (self.CircuitDev.fieldA)
                 self.fieldB = (self.CircuitDev.fieldB)
                 self.fieldANormalised = (self.CircuitDev.fieldANormalised)
                 self.fieldBNormalised = (self.CircuitDev.fieldBNormalised)
+                self.status_str_3 =  "Fields are calculated by circuit device"
 
         except PyTango.DevFailed as e:
             self.FieldQuality =  PyTango.AttrQuality.ATTR_INVALID
             self.debug_stream('Cannot read field from circuit ' + self.PowerSupplyProxy) 
             if "Cannot read field from circuit" not in self.status_str:
-                self.status_str = self.status_str + "\n" + "Cannot read field from circuit"
+                self.status_str_3  = "Cannot read field from circuit"
 
-        self.set_status(self.status_str)
-                           
+        self.set_status(self.status_str_1 + "\n" + self.status_str_2 + "\n" +  self.status_str_3)        
 
     def always_executed_hook(self):
         self.debug_stream("In always_excuted_hook()")
