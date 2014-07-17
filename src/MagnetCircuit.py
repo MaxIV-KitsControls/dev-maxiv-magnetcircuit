@@ -64,7 +64,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
         PyTango.Device_4Impl.__init__(self,cl,name)
         self.debug_stream("In __init__()")
         MagnetCircuit.init_device(self)
-
+        
+        self.set_change_event('State', True, False)
        
     def delete_device(self):
         self.debug_stream("In delete_device()")
@@ -77,7 +78,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.status_str_cyc = ""
         self.cyclingphase = "---"
         self.cyclingallowed = True
-        self.iscycling = False
 
         #Check dimensions of current and field calibration data
         #(Should be n arrays of field values for n arrays of current values)
@@ -231,7 +231,14 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
         self.status_str_cal = ""
         try:
-            self.set_state(self.ps_device.State())
+
+            #generally the circuit should echo the ps state. However, during cycling, we want the circuit to be running,
+            #and not moving, but we do want to catch any ps errors
+            ps_state = self.ps_device.State()
+            if self.get_state() == PyTango.DevState.RUNNING and ps_state in [PyTango.DevState.ON, PyTango.DevState.MOVING]:
+               pass 
+            else:
+                self.set_state(ps_state)
 
             self.actual_current =  self.ps_device.Current
 
@@ -402,8 +409,10 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     def read_CyclingState(self, attr):
         self.debug_stream("In read_CyclingState()")
-        attr_CyclingState_read = self.iscycling
-        attr.set_value(attr_CyclingState_read)
+        if self.get_state() == PyTango.DevState.RUNNING:
+            attr.set_value(True)
+        else:
+            attr.set_value(False)
 
     def read_attr_hardware(self, data):
         self.debug_stream("In read_attr_hardware()")
@@ -437,24 +446,32 @@ class MagnetCircuit (PyTango.Device_4Impl):
     #-----------------------------------------------------------------------------
     #    MagnetCircuit command methods
     #-----------------------------------------------------------------------------
+    def change_state(self,newstate):
+        oldstate = self.get_state()
+        if newstate != oldstate:
+            self.set_state(newstate)
+            if oldstate == PyTango.DevState.RUNNING or newstate == PyTango.DevState.RUNNING:
+                self.push_change_event("State", newstate)
 
     def StartCycle(self):
         self.debug_stream("In StartCycle()")
         self._cycler.cycling= True
-        self.iscycling = True
+        self.change_state(PyTango.DevState.RUNNING)
         
     def StopCycle(self):
         self.debug_stream("In StopCycle()")
         self._cycler.cycling= False
-        self.iscycling = False
+        self.change_state(PyTango.DevState.ON)
 
     def is_StartCycle_allowed(self):
-        allowed = self.cyclingallowed and not self.iscycling
+        allowed = self.cyclingallowed and not self.get_state() in [PyTango.DevState.RUNNING]
         return allowed
 
     def is_StopCycle_allowed(self):
-        allowed = self.iscycling
-        return  allowed
+        if self.get_state() in [PyTango.DevState.RUNNING]:
+            return  True
+        else:
+            return False
 
 class MagnetCircuitClass(PyTango.DeviceClass):
 
