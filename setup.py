@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from distutils.core import setup
 setup(name = 'tangods-magnetcircuit',
-      version = '1.0.5',
+      version = '1.0.6',
       description = 'Tango device for magnet circuits and magnets',
       package_dir = {'MagnetCircuit':'src'},
       packages = ['MagnetCircuit'],

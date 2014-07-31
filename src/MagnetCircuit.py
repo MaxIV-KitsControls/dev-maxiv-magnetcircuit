@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# -*- coding:utf-8 -*-
+# -*- coding:utf-8 -*- 
 
 ###############################################################################
 ##     Tango device for a generic magnet circuit (controlling dipole, quadrupole, etc)
@@ -64,9 +64,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
         PyTango.Device_4Impl.__init__(self,cl,name)
         self.debug_stream("In __init__()")
         MagnetCircuit.init_device(self)
-
+        
         self.set_change_event('State', True, False)
-
+       
     def delete_device(self):
         self.debug_stream("In delete_device()")
 
@@ -92,25 +92,25 @@ class MagnetCircuit (PyTango.Device_4Impl):
         else:
             self.hasCalibData=True
             #Make numpy arrays for field and currents for each multipole component. Assume max dimension is _maxdim with 11 measurements.
-            self.fieldsmatrix   = np.zeros(shape=(self._maxdim,11), dtype=float)
-            self.currentsmatrix = np.zeros(shape=(self._maxdim,11), dtype=float)
-
+            self.fieldsmatrix   = np.zeros(shape=(self._maxdim,11), dtype=float) 
+            self.currentsmatrix = np.zeros(shape=(self._maxdim,11), dtype=float) 
+            
             #Fill the numpy arrays, but first horrible conversion of list of chars to floats
             self.debug_stream("Multipole dimension %d ",  len(self.ExcitationCurveCurrents))
 
             for i in range (0,len(self.ExcitationCurveCurrents)):
-                MeasuredFields_l = []
-                MeasuredCurrents_l = []
+                MeasuredFields_l = []    
+                MeasuredCurrents_l = []         
                 #PJB hack since I use a string to start with like "[1,2,3]" No way to store a matrix of floats?
                 if len(self.ExcitationCurveCurrents[i])>0:
                     self.MeasuredFields_l   =   [float(x) for x in "".join(self.ExcitationCurveFields[i][1:-1]).split(",")]
                     self.MeasuredCurrents_l =   [float(x) for x in "".join(self.ExcitationCurveCurrents[i][1:-1]).split(",")]
                     self.currentsmatrix[i]=self.MeasuredCurrents_l
                     self.fieldsmatrix[i]=self.MeasuredFields_l
-
+                    
             #Need to sort in ascending order in order for interpolate to work later
-            self.fieldsmatrix.sort()
-            self.currentsmatrix.sort()
+            self.fieldsmatrix.sort()       
+            self.currentsmatrix.sort() 
 
             #Check if the current is zero for the first entry, force the field to be zero as well
             for i in range (0,len(self.ExcitationCurveCurrents)):
@@ -124,39 +124,36 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.Tilt=-1
         self.Polarity=1
         self.Orientation=1
-
-        magnet_property_types = {"Length": float, "Tilt": int, "Type": str, "Polarity": int, "Orientation": int}
-        problematic_devices = set()  # let's be optimistic
         for (i, magnet_device_name) in enumerate(self.MagnetProxies):
-            magnet_device = PyTango.DeviceProxy(magnet_device_name)
-            for prop, type_ in magnet_property_types.items():
-                try:
-                    prop_value = type_(magnet_device.get_property(prop)[prop][0])
-                except IndexError as e:
-                    # undefined property gives an empty list as a value
-                    print >> self.log_fatal, ("Couldn't read property '%s' from magnet device '%s'; "+
-                                              "is it configured properly?") % (prop, magnet_device_name)
-                    problematic_devices.add(magnet_device_name)
-                else:
-                    # we've got the value OK
-                    if i == 0:  # use first magnet as a default
-                        setattr(self, prop, prop_value)
-                    else:
-                        # consistency check; all magnets must have the same values
-                        self_value = getattr(self, prop, None)
-                        if self_value is not None and self_value != prop_value:
-                            print >> self.log_fatal, ('Found magnets of different %s on same circuit (%s)'
-                                                      % (prop, magnet_device_name))
-                            problematic_devices.add(magnet_device_name)
-
-        # If there were any issues, we exit since things are not consistent
-        if problematic_devices:
-            print >> self.log_fatal, ('Cannot start due to issues with magnet device(s): %s' %
-                                      ", ".join(problematic_devices))
-            sys.exit(1)
+            try:
+                magnet_device = PyTango.DeviceProxy(magnet_device_name)
+                newlength = float(magnet_device.get_property("Length")["Length"][0]) #is this really how to read properties?
+                newtilt   = int(magnet_device.get_property("Tilt")["Tilt"][0])  
+                newtype   = magnet_device.get_property("Type")["Type"][0]
+                newpolarity    = int(magnet_device.get_property("Polarity")["Polarity"][0])  
+                neworientation = int(magnet_device.get_property("Orientation")["Orientation"][0])  
+                if i == 0:
+                    self.Length = newlength
+                    self.Type   = newtype
+                    self.Tilt   = newtilt
+                    self.Polarity    = newpolarity
+                    self.Orientation = neworientation
+                if self.Length != newlength:
+                    print >> self.log_fatal, 'Found magnets of different length on same circuit', self.Length, newlength, magnet_device_name
+                if self.Type   != newtype:
+                    print >> self.log_fatal, 'Found magnets of different type on same circuit', self.Type, newtype, magnet_device_name
+                if self.Tilt   != newtilt:
+                    print >> self.log_fatal, 'Found magnets of different tilt on same circuit', self.Tilt, newtilt, magnet_device_name
+                if self.Polarity     != newpolarity:
+                    print >> self.log_fatal, 'Found magnets of different polarity on same circuit', self.Polarity, newpolarity, magnet_device_name
+                if self.Orientation  != neworientation:
+                    print >> self.log_fatal, 'Found magnets of different orientation on same circuit', self.Orientation, neworientation, magnet_device_name
+            except PyTango.DevFailed as e:
+                print >> self.log_fatal, 'Cannot get information from magnet device ' + magnet_device_name
+                sys.exit(1)
 
         self.debug_stream("Magnet length is %f ", self.Length)
-        self.debug_stream("Magnet type is %s  ", self.Type)
+        self.debug_stream("Magnet type is %s  ", self.Type)     
         self.debug_stream("Magnet tilt is %d  ", self.Tilt)
         self.debug_stream("Magnet polarity is %d    ", self.Polarity)
         self.debug_stream("Magnet orientation is %d ", self.Orientation)
@@ -197,10 +194,10 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
         #Get the PS device and the actual current. If cannot connect to PS device may as well just exit since probably misconfigured properties.
         try:
-            self.ps_device = PyTango.DeviceProxy(self.PowerSupplyProxy)
+            self.ps_device = PyTango.DeviceProxy(self.PowerSupplyProxy)             
             self.status_str_ps = "Connected to PS device " + self.PowerSupplyProxy
         except PyTango.DevFailed as e:
-            self.debug_stream('Cannot connect to PS ' + self.PowerSupplyProxy)
+            self.debug_stream('Cannot connect to PS ' + self.PowerSupplyProxy) 
             sys.exit(1)
 
         #if connected try to read current and state
@@ -208,21 +205,21 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
         #To give consistent starting conditions, now calculate the current given these fields
         #i.e. we calculate back the actual current we just read
-        #Assuming that we have the calib data.
+        #Assuming that we have the calib data. 
         if self.hasCalibData:
             self.calc_current \
                 = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
 
         #Finally set up cycling machinery
         self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
-        #The cycling varies the current from min and max a number of times.
+        #The cycling varies the current from min and max a number of times. 
         #Need to get the current limits from the PS device; number of iterations and wait time can be properties
         maxcurrent_s = self.ps_device.get_attribute_config("Current").max_value
         mincurrent_s = self.ps_device.get_attribute_config("Current").min_value
         if maxcurrent_s == 'Not specified' or mincurrent_s == 'Not specified':
             self.debug_stream("Current limits not specified, cannot do cycling")
             #cycling command should not be allowed
-            self.cyclingallowed = False
+            self.cyclingallowed = False 
             self._cycler = None
         #! We assume if there are limits then they are good!
         else:
@@ -242,7 +239,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             #and not moving, but we do want to catch any ps errors
             ps_state = self.ps_device.State()
             if self.get_state() == PyTango.DevState.RUNNING and ps_state in [PyTango.DevState.ON, PyTango.DevState.MOVING]:
-               pass
+               pass 
             else:
                 self.set_state(ps_state)
 
@@ -254,21 +251,21 @@ class MagnetCircuit (PyTango.Device_4Impl):
             if self.hasCalibData:
                 (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
                     = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy, self.actual_current)
-                self.status_str_cal = "Field-current calibration data available"
+                self.status_str_cal = "Field-current calibration data available" 
 
             else:
-                self.status_str_cal = "No calibration data available, showing PS current only"
+                self.status_str_cal = "No calibration data available, showing PS current only" 
                 self.calc_current =   self.actual_current
                 self.field_quality =  PyTango.AttrQuality.ATTR_INVALID
 
         except PyTango.DevFailed as e:
             self.current_quality =  PyTango.AttrQuality.ATTR_INVALID
-            self.debug_stream('Cannot read current from PS ' + self.PowerSupplyProxy)
-            self.status_str_cal = "Cannot read current on PS" + self.PowerSupplyProxy
+            self.debug_stream('Cannot read current from PS ' + self.PowerSupplyProxy) 
+            self.status_str_cal = "Cannot read current on PS" + self.PowerSupplyProxy 
 
     def calculate_brho(self):
         #Bρ = sqrt(T(T+2M0)/(qc0) where M0 = rest mass of the electron in MeV, q = 1 and c0 = speed of light Mm/s (mega m!) Energy is in eV to start.
-        self.BRho = sqrt( self.energy/1000.0 * (self.energy/1000.0 + (2 * 0.511) ) ) / (300.0)
+        self.BRho = sqrt( self.energy/1000.0 * (self.energy/1000.0 + (2 * 0.511) ) ) / (300.0) 
 
     def set_current(self):
         #Set the current on the ps
@@ -276,8 +273,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
         try:
             self.ps_device.write_attribute("Current", self.calc_current)
         except PyTango.DevFailed as e:
-            self.set_state(PyTango.DevState.ALARM)
-            self.status_str_ps = "Cannot set current on PS" + self.PowerSupplyProxy
+            self.set_state(PyTango.DevState.ALARM)            
+            self.status_str_ps = "Cannot set current on PS" + self.PowerSupplyProxy 
 
     def always_executed_hook(self):
         self.debug_stream("In always_excuted_hook()")
@@ -291,7 +288,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.cyclingphase  = "Cycling not permitted"
 
 
-        self.set_status(self.status_str_ps + "\n" + self.status_str_cal + "\nCycling status: " +  self.cyclingphase)
+        self.set_status(self.status_str_ps + "\n" + self.status_str_cal + "\nCycling status: " +  self.cyclingphase) 
 
     #-----------------------------------------------------------------------------
     #    MagnetCircuit read/write attribute methods
@@ -339,7 +336,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.debug_stream("In write_energy()")
         self.energy = attr.get_write_value()
         self.calculate_brho()
-        #If energy changes, current or field must also change
+        #If energy changes, current or field must also change            
         #Only do something if the current from the PS is known
         if self.current_quality ==  PyTango.AttrQuality.ATTR_VALID:
             if self.scaleField:
@@ -381,15 +378,15 @@ class MagnetCircuit (PyTango.Device_4Impl):
             attr.set_write_value(self.k1val)
 
     def read_intk1(self, attr):
-        self.debug_stream("In read_intk1()")
+        self.debug_stream("In read_intk1()")  
         if self.hasCalibData == False:
             attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
-        else:
+        else: 
             attr_intk1_read = self.k1val * self.Length
             attr.set_value(attr_intk1_read)
-
+   
     def write_k1(self, attr):
-        self.debug_stream("In write_k1()")
+        self.debug_stream("In write_k1()")  
         if self.hasCalibData:
             attr_k1_write=attr.get_write_value()
             self.k1val = attr_k1_write
@@ -407,7 +404,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             ###########################################################
             #Set the current on the ps
             self.set_current()
-
+        
     def read_CyclingStatus(self, attr):
         self.debug_stream("In read_CyclingStatus()")
         attr_CyclingStatus_read = self.cyclingphase
@@ -439,7 +436,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
             intk1 = PyTango.Attr('intk1', PyTango.DevDouble, PyTango.READ)
             self.add_attribute(intk1,MagnetCircuit.read_intk1)
-
+            
             att = self.get_device_attr().get_attr_by_name("intk1")
             multi_prop = PyTango.MultiAttrProp()
             att.get_properties(multi_prop)
@@ -447,7 +444,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             multi_prop.description = "length integrated k1"
             multi_prop.label = "length integrated k1"
             att.set_properties(multi_prop)
-       #Need to deal with other magnet types as well. Mainly a question of setting units correctly.
+       #Need to deal with other magnet types as well. Mainly a question of setting units correctly. 
 
     #-----------------------------------------------------------------------------
     #    MagnetCircuit command methods
@@ -463,7 +460,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.debug_stream("In StartCycle()")
         self._cycler.cycling= True
         self.change_state(PyTango.DevState.RUNNING)
-
+        
     def StopCycle(self):
         self.debug_stream("In StopCycle()")
         self._cycler.cycling= False
@@ -482,9 +479,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
 class MagnetCircuitClass(PyTango.DeviceClass):
 
     def dyn_attr(self, dev_list):
-        """Invoked to create dynamic attributes for the given devices.
+        """Invoked to create dynamic attributes for the given devices.          
         Default implementation calls
-        :meth:`Magnet.initialize_dynamic_attributes` for each device
+        :meth:`Magnet.initialize_dynamic_attributes` for each device    
         :type dev_list: :class:`PyTango.DeviceImpl`"""
 
         for dev in dev_list:
@@ -519,7 +516,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
         }
 
 
-    #Command definitions
+    #Command definitions  
     cmd_list = {
         'StartCycle':
              [[PyTango.DevVoid, ""],
