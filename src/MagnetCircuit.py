@@ -232,6 +232,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.status_str_cal = ""
         try:
 
+            self.current_quality =  PyTango.AttrQuality.ATTR_VALID
+            self.field_quality =  PyTango.AttrQuality.ATTR_VALID
+
             #generally the circuit should echo the ps state. However, during cycling, we want the circuit to be running,
             #and not moving, but we do want to catch any ps errors
             ps_state = self.ps_device.State()
