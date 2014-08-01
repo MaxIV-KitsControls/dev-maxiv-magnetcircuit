@@ -16,7 +16,7 @@ from math import sqrt
 
 _maxdim = 10 #Maximum number of multipole components
 
-def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  polarity, orientation, tilt, length, energy, actual_current):
+def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  polarity, orientation, tilt, length, actual_current):
 
     fieldA = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
     fieldB = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
@@ -51,7 +51,7 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
 
     return thiscomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
 
-def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, polarity, orientation, tilt, length, energy, fieldA, fieldB):
+def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, polarity, orientation, tilt, length, fieldA, fieldB):
     
     #Given k1 * length * BRho (call it intBtimesBRho) we get a current
     #k1 * BRho is the element of fieldB
@@ -68,5 +68,8 @@ def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, pol
     #Use numpy to interpolate. We only deal with the allowed component. Assume no need to extrapolate
 
     calc_current = np.interp(intBtimesBRho, fieldsmatrix[allowed_component], currentsmatrix[allowed_component])
+
+    #print "intBtimesBRho is ", intBtimesBRho
+    #print "corresponding current is ", calc_current
 
     return calc_current

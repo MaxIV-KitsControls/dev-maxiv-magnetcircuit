@@ -26,6 +26,7 @@ class MagnetCycling(StateMachine):
                   "WAIT_LO",
                   "SET_MAX_CURRENT", 
                   "WAIT_HI",
+                  "SET_NOM_CURRENT", 
                   "DONE"]
 
         StateMachine.__init__(self, states, on_state_change=print_state_change)
@@ -43,10 +44,12 @@ class MagnetCycling(StateMachine):
         self.SET_MIN_CURRENT.when(lambda: self.powersupply.isMoving() == False).goto(self.WAIT_LO)
         self.WAIT_LO.set_action(wait)
 
-        #exit the lo wait by moving to the max current or moving to done if done all iterations
+        #exit the lo wait by moving to the max current or moving to nom current if done all iterations
         self.WAIT_LO.when(lambda: time.time() >= self.timeout).goto(self.SET_MAX_CURRENT)
-        self.WAIT_LO.when(lambda: self.iterations == self.interations_max).goto(self.DONE)
         self.SET_MAX_CURRENT.set_action(self.set_max_current)
+        self.WAIT_LO.when(lambda: self.iterations == self.interations_max).goto(self.SET_NOM_CURRENT)
+        self.SET_NOM_CURRENT.set_action(self.set_nom_current)
+        self.SET_NOM_CURRENT.when(lambda: self.powersupply.isMoving() == False).goto(self.DONE)
 
         #when reached max (ie no longer moving) wait 5s
         self.SET_MAX_CURRENT.when(lambda: self.powersupply.isMoving() == False).goto(self.WAIT_HI)
@@ -60,6 +63,10 @@ class MagnetCycling(StateMachine):
         self.powersupply.setCurrent(self.current_hi)
         self.iterations = self.iterations + 1
         self.iterationstatus = " (" + str(self.iterations) + "/" + str(self.interations_max) + ")"
+        return True
+
+    def set_nom_current(self):
+        self.powersupply.setCurrent(self.current_hi/1.1) 
         return True
 
     def set_min_current(self):

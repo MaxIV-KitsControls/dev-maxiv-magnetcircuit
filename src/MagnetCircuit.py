@@ -155,11 +155,11 @@ class MagnetCircuit (PyTango.Device_4Impl):
                                       ", ".join(problematic_devices))
             sys.exit(1)
 
-        self.debug_stream("Magnet length is %f ", self.Length)
-        self.debug_stream("Magnet type is %s  ", self.Type)
-        self.debug_stream("Magnet tilt is %d  ", self.Tilt)
-        self.debug_stream("Magnet polarity is %d    ", self.Polarity)
-        self.debug_stream("Magnet orientation is %d ", self.Orientation)
+        self.debug_stream("Magnet length is %f " % self.Length)
+        self.debug_stream("Magnet type is %s  " %  self.Type)
+        self.debug_stream("Magnet tilt is %d  " % self.Tilt)
+        self.debug_stream("Magnet polarity is %d    " % self.Polarity)
+        self.debug_stream("Magnet orientation is %d " % self.Orientation)
 
         #The magnet type determines which row in the numpy array we are interested in to control
         #Note that in the multipole expansion we have:
@@ -179,7 +179,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
             sys.exit(1)
 
         #Energy needs to be ready from somewhere
-        self.energy = 100000.0 #=100 MeV for testing
+        self.energy_r = 100000.0 #=100 MeV for testing
+        self.energy_w = None
         self.BRho = 1.0      #a conversion factor that depends on energy
         self.calculate_brho()
 
@@ -188,7 +189,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.fieldB = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
         self.fieldANormalised = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
         self.fieldBNormalised = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
-        self.k1val = -1000.0
+        self.k1val_r = -1000.0
+        self.k1val_w = None
         self.scaleField=False
         self.calc_current = -1.0
         self.actual_current = - 1.0
@@ -211,12 +213,14 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #Assuming that we have the calib data.
         if self.hasCalibData:
             self.calc_current \
-                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
+                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length,  self.fieldA, self.fieldB)
 
         #Finally set up cycling machinery
         self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
         #The cycling varies the current from min and max a number of times.
         #Need to get the current limits from the PS device; number of iterations and wait time can be properties
+        self.maxcurrent = None
+        self.mincurrent = None
         maxcurrent_s = self.ps_device.get_attribute_config("Current").max_value
         mincurrent_s = self.ps_device.get_attribute_config("Current").min_value
         if maxcurrent_s == 'Not specified' or mincurrent_s == 'Not specified':
@@ -226,9 +230,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self._cycler = None
         #! We assume if there are limits then they are good!
         else:
-            maxcurrent = float(maxcurrent_s)
-            mincurrent = float(mincurrent_s)
-            self._cycler =  MagnetCycling(self.wrapped_ps_device, maxcurrent, mincurrent, 5.0, 4)
+            self.maxcurrent = float(maxcurrent_s)
+            self.mincurrent = float(mincurrent_s)
+            self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 3)
 
     def get_ps_state(self):
 
@@ -252,8 +256,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.calc_current =  self.ps_device.read_attribute("Current").w_value
 
             if self.hasCalibData:
-                (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
-                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy, self.actual_current)
+                (self.k1val_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
+                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length, self.actual_current)
                 self.status_str_cal = "Field-current calibration data available"
 
             else:
@@ -268,10 +272,16 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     def calculate_brho(self):
         #Bρ = sqrt(T(T+2M0)/(qc0) where M0 = rest mass of the electron in MeV, q = 1 and c0 = speed of light Mm/s (mega m!) Energy is in eV to start.
-        self.BRho = sqrt( self.energy/1000.0 * (self.energy/1000.0 + (2 * 0.511) ) ) / (300.0)
+        self.BRho = sqrt( self.energy_r/1000.0 * (self.energy_r/1000.0 + (2 * 0.511) ) ) / (300.0)
 
     def set_current(self):
         #Set the current on the ps
+        if self.calc_current > self.maxcurrent:
+            self.debug_stream("Requested current %f above limit of PS (%f)" % (self.calc_current,self.maxcurrent))
+            self.calc_current = self.maxcurrent
+        if self.calc_current < self.mincurrent:
+            self.debug_stream("Requested current %f below limit of PS (%f)" % (self.calc_current,self.mincurrent))
+            self.calc_current = self.mincurrent
         self.debug_stream("SETTING CURRENT ON THE PS TO: %f ", self.calc_current)
         try:
             self.ps_device.write_attribute("Current", self.calc_current)
@@ -332,39 +342,51 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     def read_energy(self, attr):
         self.debug_stream("In read_energy()")
-        attr.set_value(self.energy)
-        attr.set_write_value(self.energy)
+        attr.set_value(self.energy_r)
+        if self.energy_w == None: #true at initialise
+            self.energy_w = self.energy_r
+            attr.set_write_value(self.energy_w)
 
     def write_energy(self, attr):
         self.debug_stream("In write_energy()")
-        self.energy = attr.get_write_value()
+        self.energy_r = attr.get_write_value()
         self.calculate_brho()
         #If energy changes, current or field must also change
         #Only do something if the current from the PS is known
         if self.current_quality ==  PyTango.AttrQuality.ATTR_VALID:
             if self.scaleField:
-                self.debug_stream("Energy changed: will recalculate and set current")
+                self.debug_stream("Energy (Brho) changed to %f (%f): will recalculate current to preserve field" % (self.energy_r, self.BRho) )
+                #since brho changed, need to recalc the field
+                if self.Tilt == 0:
+                    #self.fieldBNormalised[1]  = attr_k1_write
+                    self.fieldB[1]  = self.k1val_r * self.BRho
+                else:
+                    #self.fieldANormalised[1]  = attr_k1_write
+                    self.fieldA[1]  = self.k1val_r * self.BRho
+                #now find the current if possible
                 if self.hasCalibData:
                     self.calc_current \
-                        = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
+                        = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.Polarity, self.Orientation, self.Tilt, self.Length, self.fieldA, self.fieldB)
                     ###########################################################
                     #Set the current on the ps
                     self.set_current()
             else:
-                self.debug_stream("Energy changed: will recalculate fields")
+                self.debug_stream("Energy changed: will recalculate fields for the PS current")
                 if self.hasCalibData:
-                    (self.k1val, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
-                        = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy, self.actual_current)
+                    (self.k1val_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
+                        = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.Polarity, self.Orientation, self.Tilt, self.Length, self.actual_current)
+                    #if we changed the read value of k1 now, change the set value to correspond
+                    self.k1val_w = self.k1val_r
         else:
             attr.set_quality(self.current_quality)
 
-    def read_scaleFieldByEnergy(self, attr):
-        self.debug_stream("In read_scaleFieldByEnergy()")
+    def read_fixNormFieldOnEnergyChange(self, attr):
+        self.debug_stream("In read_changeNormFieldWithEnergy()")
         attr.set_value(self.scaleField)
         attr.set_write_value(self.scaleField)
 
-    def write_scaleFieldByEnergy(self, attr):
-        self.debug_stream("In write_scaleFieldByEnergy()")
+    def write_fixNormFieldOnEnergyChange(self, attr):
+        self.debug_stream("In write_changeNormFieldWithEnergy()")
         self.scaleField = attr.get_write_value()
 
     def read_BRho(self, attr):
@@ -376,23 +398,25 @@ class MagnetCircuit (PyTango.Device_4Impl):
         if self.hasCalibData == False:
             attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
         else:
-            attr_k1_read = self.k1val
+            attr_k1_read = self.k1val_r
             attr.set_value(attr_k1_read)
-            attr.set_write_value(self.k1val)
+            if self.k1val_w == None: #true at initialise
+                self.k1val_w = self.k1val_r
+            attr.set_write_value(self.k1val_w)
 
     def read_intk1(self, attr):
         self.debug_stream("In read_intk1()")
         if self.hasCalibData == False:
             attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
         else:
-            attr_intk1_read = self.k1val * self.Length
+            attr_intk1_read = self.k1val_r * self.Length
             attr.set_value(attr_intk1_read)
 
     def write_k1(self, attr):
         self.debug_stream("In write_k1()")
         if self.hasCalibData:
             attr_k1_write=attr.get_write_value()
-            self.k1val = attr_k1_write
+            self.k1val_w = attr_k1_write
             #Note that we set the component of the field vector directly here, but
             #calling calculate_fields will in turn set the whole vector, including this component again
             if self.Tilt == 0:
@@ -403,7 +427,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 self.fieldA[1]  = attr_k1_write * self.BRho
 
             self.calc_current \
-                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.Polarity, self.Orientation, self.Tilt, self.Length, self.energy,  self.fieldA, self.fieldB)
+                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.Polarity, self.Orientation, self.Tilt, self.Length, self.fieldA, self.fieldB)
             ###########################################################
             #Set the current on the ps
             self.set_current()
@@ -595,7 +619,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
              'label': "electron energy",
              'unit': "eV",
          } ],
-        'scaleFieldByEnergy':
+        'fixNormFieldOnEnergyChange':
         [[PyTango.DevBoolean,
         PyTango.SCALAR,
           PyTango.READ_WRITE],
