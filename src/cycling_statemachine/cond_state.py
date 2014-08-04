@@ -44,10 +44,13 @@ class MagnetCycling(StateMachine):
         self.SET_MIN_CURRENT.when(lambda: self.powersupply.isMoving() == False).goto(self.WAIT_LO)
         self.WAIT_LO.set_action(wait)
 
-        #exit the lo wait by moving to the max current or moving to nom current if done all iterations
+        #exit the lo wait by moving to the max current 
         self.WAIT_LO.when(lambda: time.time() >= self.timeout).goto(self.SET_MAX_CURRENT)
         self.SET_MAX_CURRENT.set_action(self.set_max_current)
-        self.WAIT_LO.when(lambda: self.iterations == self.interations_max).goto(self.SET_NOM_CURRENT)
+
+        #exit hi wait by moving to min current or to nom current if done all iterations
+        self.WAIT_HI.when(lambda: self.iterations == self.interations_max).goto(self.SET_NOM_CURRENT)
+        self.WAIT_HI.when(lambda: time.time() >= self.timeout).goto(self.SET_MIN_CURRENT)
         self.SET_NOM_CURRENT.set_action(self.set_nom_current)
         self.SET_NOM_CURRENT.when(lambda: self.powersupply.isMoving() == False).goto(self.DONE)
 
@@ -55,8 +58,7 @@ class MagnetCycling(StateMachine):
         self.SET_MAX_CURRENT.when(lambda: self.powersupply.isMoving() == False).goto(self.WAIT_HI)
         self.WAIT_HI.set_action(wait)
 
-        #exit the hi wait by moving to the min current
-        self.WAIT_HI.when(lambda: time.time() >= self.timeout).goto(self.SET_MIN_CURRENT)
+
 
 
     def set_max_current(self):

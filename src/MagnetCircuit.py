@@ -232,7 +232,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
         else:
             self.maxcurrent = float(maxcurrent_s)
             self.mincurrent = float(mincurrent_s)
-            self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 3)
+            self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 4)
+
 
     def get_ps_state(self):
 
@@ -297,6 +298,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #check phase of magnet cycling (if never started any cycling, will return ---)
         if self.cyclingallowed:
             self.cyclingphase  = self._cycler.phase
+            #need to check here if we should still be RUNNING, not ideal way
+            if  self.cyclingphase == "NOT CYCLING":
+                self.change_state(PyTango.DevState.ON)
         else:
             self.cyclingphase  = "Cycling not permitted"
 
@@ -450,6 +454,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
     #-----------------------------------------------------------------------------
     def initialize_dynamic_attributes(self):
         if self.Type == "kquad":
+
+            #config k1
             k1 = PyTango.Attr('k1', PyTango.DevDouble, PyTango.READ_WRITE)
             self.add_attribute(k1,MagnetCircuit.read_k1, MagnetCircuit.write_k1)
 
@@ -459,8 +465,21 @@ class MagnetCircuit (PyTango.Device_4Impl):
             multi_prop.unit = "m ^-2"
             multi_prop.description = "k1"
             multi_prop.label = "k1"
+
+            #set alarm levels on k1 (etc) corresponding to the PS alarms, if we have calib data to convert
+            if self.hasCalibData:
+                mink1 = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length,  self.mincurrent)[0]
+                maxk1 = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length,  self.maxcurrent)[0]
+                if mink1<maxk1:
+                    multi_prop.min_value=mink1
+                    multi_prop.max_value=maxk1
+                else:
+                    multi_prop.min_value=maxk1
+                    multi_prop.max_value=mink1
+
             att.set_properties(multi_prop)
 
+            #config intk1
             intk1 = PyTango.Attr('intk1', PyTango.DevDouble, PyTango.READ)
             self.add_attribute(intk1,MagnetCircuit.read_intk1)
 
@@ -471,6 +490,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             multi_prop.description = "length integrated k1"
             multi_prop.label = "length integrated k1"
             att.set_properties(multi_prop)
+
        #Need to deal with other magnet types as well. Mainly a question of setting units correctly.
 
     #-----------------------------------------------------------------------------
@@ -624,8 +644,8 @@ class MagnetCircuitClass(PyTango.DeviceClass):
         PyTango.SCALAR,
           PyTango.READ_WRITE],
          {
-             'description': "option to scale field by energy",
-             'label': "scale field by energy",
+             'description': "If true, if the energy changes the current is recalculated in order to preserve the current normalised field",
+             'label': "Preserve normalised field if energy changes (re-calculate current)",
              'unit': "T/F",
          } ],
         'BRho':
