@@ -77,7 +77,7 @@ class Magnet (PyTango.Device_4Impl):
         except Exception as e:
             self.interlock_attribute = None
             self.TempInterlockQuality = PyTango.AttrQuality.ATTR_INVALID
-            self.status_str_1 = self.status_str_1 + "\n" + "No interlock tag specified"
+            self.status_str_1 = self.status_str_1 
 
         #check interlocks
         self.check_interlock()
@@ -101,7 +101,8 @@ class Magnet (PyTango.Device_4Impl):
                 self.TempInterlockQuality = PyTango.AttrQuality.ATTR_INVALID
                 self.status_str_2 = "Cannot read specified interlock tag "
 
-
+        else:
+            self.status_str_2 =  "No interlock tag specified"
 
     def get_circuit_state(self):
 

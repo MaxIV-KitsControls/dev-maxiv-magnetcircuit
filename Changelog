@@ -20,3 +20,7 @@
 18-07-2014 Paul Bell	
 	* Basic test of state machine, improved state and status reporting, push state change events
 	* v1.0.5
+
+07-08-2014 Paul Bell
+	* Implement general functionality for all magnet types
+	* v1.1.0

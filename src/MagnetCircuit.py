@@ -91,26 +91,26 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.debug_stream("No calibration data")
         else:
             self.hasCalibData=True
-            #Make numpy arrays for field and currents for each multipole component. Assume max dimension is _maxdim with 11 measurements.
-            self.fieldsmatrix   = np.zeros(shape=(self._maxdim,11), dtype=float)
-            self.currentsmatrix = np.zeros(shape=(self._maxdim,11), dtype=float)
+            #Make numpy arrays for field and currents for each multipole component. 
+            #At this point the calibration data are strings with comma separated values. Get the length by counting commas!
+            array_length = self.ExcitationCurveCurrents[0].count(",")+1
+            #Assume max dimension is _maxdim with array_length
+            self.fieldsmatrix   = np.zeros(shape=(self._maxdim,array_length), dtype=float)
+            self.currentsmatrix = np.zeros(shape=(self._maxdim,array_length), dtype=float)
 
             #Fill the numpy arrays, but first horrible conversion of list of chars to floats
-            self.debug_stream("Multipole dimension %d ",  len(self.ExcitationCurveCurrents))
+            self.debug_stream("Multipole dimension %d " % len(self.ExcitationCurveCurrents))
 
             for i in range (0,len(self.ExcitationCurveCurrents)):
                 MeasuredFields_l = []
                 MeasuredCurrents_l = []
                 #PJB hack since I use a string to start with like "[1,2,3]" No way to store a matrix of floats?
                 if len(self.ExcitationCurveCurrents[i])>0:
-                    self.MeasuredFields_l   =   [float(x) for x in "".join(self.ExcitationCurveFields[i][1:-1]).split(",")]
-                    self.MeasuredCurrents_l =   [float(x) for x in "".join(self.ExcitationCurveCurrents[i][1:-1]).split(",")]
+                    #need to sort the currents and fields by absolute values for interpolation to work later
+                    self.MeasuredFields_l   =  sorted([float(x) for x in "".join(self.ExcitationCurveFields[i][1:-1]).split(",")],key=abs)
+                    self.MeasuredCurrents_l =  sorted([float(x) for x in "".join(self.ExcitationCurveCurrents[i][1:-1]).split(",")],key=abs)
                     self.currentsmatrix[i]=self.MeasuredCurrents_l
                     self.fieldsmatrix[i]=self.MeasuredFields_l
-
-            #Need to sort in ascending order in order for interpolate to work later
-            self.fieldsmatrix.sort()
-            self.currentsmatrix.sort()
 
             #Check if the current is zero for the first entry, force the field to be zero as well
             for i in range (0,len(self.ExcitationCurveCurrents)):
@@ -118,14 +118,24 @@ class MagnetCircuit (PyTango.Device_4Impl):
                     self.currentsmatrix[i][0] = 0.0
                     self.fieldsmatrix[i][0] = 0.0
 
+                    
+            #check finally the calibration data
+            self.debug_stream("Final currents matrix: ")
+            self.debug_stream(self.currentsmatrix)
+            self.debug_stream("Final fields matrix:   ")
+            self.debug_stream(self.fieldsmatrix)
+   
         #Check length, tilt, type of actual magnet devices (should all be the same)
         self.Length=-1.0
         self.Type=""
         self.Tilt=-1
-        self.Polarity=1
-        self.Orientation=1
+        #self.Polarity=1
+        #self.Orientation=1
+        self.PolTimesOrient=1
 
-        magnet_property_types = {"Length": float, "Tilt": int, "Type": str, "Polarity": int, "Orientation": int}
+        #magnet_property_types = {"Length": float, "Tilt": int, "Type": str, "Polarity": int, "Orientation": int}
+        #deal with polarity and orientation separately
+        magnet_property_types = {"Length": float, "Tilt": int, "Type": str}
         problematic_devices = set()  # let's be optimistic
         for (i, magnet_device_name) in enumerate(self.MagnetProxies):
             magnet_device = PyTango.DeviceProxy(magnet_device_name)
@@ -149,17 +159,29 @@ class MagnetCircuit (PyTango.Device_4Impl):
                                                       % (prop, magnet_device_name))
                             problematic_devices.add(magnet_device_name)
 
+            #special case for polarity and orientation, check only the product
+            newpolarity = int(magnet_device.get_property("Polarity")["Polarity"][0])
+            neworientation = int(magnet_device.get_property("Orientation")["Orientation"][0])
+            newpoltimesorient = newpolarity * neworientation
+            if i == 0:
+                self.PolTimesOrient = newpolarity * neworientation
+                if self.PolTimesOrient != newpoltimesorient:
+                    print >> self.log_fatal, 'Found magnets of different polarity times orientation on same circuit', self.PolTimesOrient, newpoltimesorient, magnet_device_name
+                    problematic_devices.add(magnet_device_name)
+
         # If there were any issues, we exit since things are not consistent
         if problematic_devices:
             print >> self.log_fatal, ('Cannot start due to issues with magnet device(s): %s' %
                                       ", ".join(problematic_devices))
             sys.exit(1)
 
+
         self.debug_stream("Magnet length is %f " % self.Length)
         self.debug_stream("Magnet type is %s  " %  self.Type)
         self.debug_stream("Magnet tilt is %d  " % self.Tilt)
-        self.debug_stream("Magnet polarity is %d    " % self.Polarity)
-        self.debug_stream("Magnet orientation is %d " % self.Orientation)
+        #self.debug_stream("Magnet polarity is %d    " % self.Polarity)
+        #self.debug_stream("Magnet orientation is %d " % self.Orientation)
+        self.debug_stream("Magnet polarity times orientation is %d " % self.PolTimesOrient)
 
         #The magnet type determines which row in the numpy array we are interested in to control
         #Note that in the multipole expansion we have:
@@ -167,7 +189,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #which of course is row 0-3 in our numpy array
 
         self.allowed_component = -1
-        if self.Type in ["csrcsbend","hkick","vkick"]:
+        if self.Type in ["csrcsbend","hkick","vkick","sole"]:
             #h and vkick also here using small theta. Large theta for bends.
             self.allowed_component = 0
         elif self.Type == "kquad":
@@ -189,8 +211,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.fieldB = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
         self.fieldANormalised = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
         self.fieldBNormalised = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
-        self.k1val_r = -1000.0
-        self.k1val_w = None
+        self.variableComp_r = -1000.0
+        self.variableComp_w = None
         self.scaleField=False
         self.calc_current = -1.0
         self.actual_current = - 1.0
@@ -213,7 +235,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #Assuming that we have the calib data.
         if self.hasCalibData:
             self.calc_current \
-                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length,  self.fieldA, self.fieldB)
+                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.fieldA, self.fieldB)
 
         #Finally set up cycling machinery
         self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
@@ -257,14 +279,15 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.calc_current =  self.ps_device.read_attribute("Current").w_value
 
             if self.hasCalibData:
-                (self.k1val_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
-                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length, self.actual_current)
+                (self.variableComp_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
+                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length, self.actual_current)
                 self.status_str_cal = "Field-current calibration data available"
 
             else:
                 self.status_str_cal = "No calibration data available, showing PS current only"
                 self.calc_current =   self.actual_current
                 self.field_quality =  PyTango.AttrQuality.ATTR_INVALID
+                self.cyclingallowed = False
 
         except PyTango.DevFailed as e:
             self.current_quality =  PyTango.AttrQuality.ATTR_INVALID
@@ -298,9 +321,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #check phase of magnet cycling (if never started any cycling, will return ---)
         if self.cyclingallowed:
             self.cyclingphase  = self._cycler.phase
-            #need to check here if we should still be RUNNING, not ideal way
+            #need to check here if we should still be RUNNING, not ideal way, needs refactor since set already in get_ps_state
             if  self.cyclingphase == "NOT CYCLING":
-                self.change_state(PyTango.DevState.ON)
+                self.change_state(self.ps_device.State())
         else:
             self.cyclingphase  = "Cycling not permitted"
 
@@ -362,25 +385,23 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 self.debug_stream("Energy (Brho) changed to %f (%f): will recalculate current to preserve field" % (self.energy_r, self.BRho) )
                 #since brho changed, need to recalc the field
                 if self.Tilt == 0:
-                    #self.fieldBNormalised[1]  = attr_k1_write
-                    self.fieldB[1]  = self.k1val_r * self.BRho
+                    self.fieldB[self.allowed_component]  = self.variableComp_r * self.BRho
                 else:
-                    #self.fieldANormalised[1]  = attr_k1_write
-                    self.fieldA[1]  = self.k1val_r * self.BRho
+                    self.fieldA[self.allowed_component]  = self.variableComp_r * self.BRho
                 #now find the current if possible
                 if self.hasCalibData:
                     self.calc_current \
-                        = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.Polarity, self.Orientation, self.Tilt, self.Length, self.fieldA, self.fieldB)
+                        = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Length, self.fieldA, self.fieldB)
                     ###########################################################
                     #Set the current on the ps
                     self.set_current()
             else:
                 self.debug_stream("Energy changed: will recalculate fields for the PS current")
                 if self.hasCalibData:
-                    (self.k1val_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
-                        = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.Polarity, self.Orientation, self.Tilt, self.Length, self.actual_current)
-                    #if we changed the read value of k1 now, change the set value to correspond
-                    self.k1val_w = self.k1val_r
+                    (self.variableComp_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
+                        = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Length, self.actual_current)
+                    #if we changed the read value of variableComp now, change the set value to correspond
+                    self.variableComp_w = self.variableComp_r
         else:
             attr.set_quality(self.current_quality)
 
@@ -397,41 +418,39 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.debug_stream("In read_BRho()")
         attr.set_value(self.BRho)
 
-    def read_k1(self, attr):
-        self.debug_stream("In read_k1()")
+    def read_variableComp(self, attr):
+        self.debug_stream("In read_variableComp()")
         if self.hasCalibData == False:
             attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
         else:
-            attr_k1_read = self.k1val_r
-            attr.set_value(attr_k1_read)
-            if self.k1val_w == None: #true at initialise
-                self.k1val_w = self.k1val_r
-            attr.set_write_value(self.k1val_w)
+            attr_variableComp_read = self.variableComp_r
+            attr.set_value(attr_variableComp_read)
+            if self.variableComp_w == None: #true at initialise
+                self.variableComp_w = self.variableComp_r
+            attr.set_write_value(self.variableComp_w)
 
-    def read_intk1(self, attr):
-        self.debug_stream("In read_intk1()")
+    def read_intVariableComp(self, attr):
+        self.debug_stream("In read_intVariableComp()")
         if self.hasCalibData == False:
             attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
         else:
-            attr_intk1_read = self.k1val_r * self.Length
-            attr.set_value(attr_intk1_read)
+            attr_intVariableComp_read = self.variableComp_r * self.Length
+            attr.set_value(attr_intVariableComp_read)
 
-    def write_k1(self, attr):
-        self.debug_stream("In write_k1()")
+    def write_variableComp(self, attr):
+        self.debug_stream("In write_variableComp()")
         if self.hasCalibData:
-            attr_k1_write=attr.get_write_value()
-            self.k1val_w = attr_k1_write
+            attr_variableComp_write=attr.get_write_value()
+            self.variableComp_w = attr_variableComp_write
             #Note that we set the component of the field vector directly here, but
             #calling calculate_fields will in turn set the whole vector, including this component again
             if self.Tilt == 0:
-                self.fieldBNormalised[1]  = attr_k1_write
-                self.fieldB[1]  = attr_k1_write * self.BRho
+                self.fieldB[self.allowed_component]  = attr_variableComp_write * self.BRho
             else:
-                self.fieldANormalised[1]  = attr_k1_write
-                self.fieldA[1]  = attr_k1_write * self.BRho
+                self.fieldA[self.allowed_component]  = attr_variableComp_write * self.BRho
 
             self.calc_current \
-                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.Polarity, self.Orientation, self.Tilt, self.Length, self.fieldA, self.fieldB)
+                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Length, self.fieldA, self.fieldB)
             ###########################################################
             #Set the current on the ps
             self.set_current()
@@ -453,43 +472,64 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     #-----------------------------------------------------------------------------
     def initialize_dynamic_attributes(self):
+
+        #there is always a single variable component of the field, but the units and label depend on the magnet type
+
+        variableComp = PyTango.Attr('variableComp', PyTango.DevDouble, PyTango.READ_WRITE)
+        self.add_attribute(variableComp,MagnetCircuit.read_variableComp, MagnetCircuit.write_variableComp)
+
+        att = self.get_device_attr().get_attr_by_name("variableComp")
+        multi_prop = PyTango.MultiAttrProp()
+        att.get_properties(multi_prop)
+        multi_prop.description = "The variable component of the field, which depends on the magnet type (k2 for sextupoles, k1 for quads, theta for dipoles)"
+
+        if self.Type == "ksext":
+            multi_prop.unit = "m ^-3"
+            multi_prop.label = "k2"
         if self.Type == "kquad":
-
-            #config k1
-            k1 = PyTango.Attr('k1', PyTango.DevDouble, PyTango.READ_WRITE)
-            self.add_attribute(k1,MagnetCircuit.read_k1, MagnetCircuit.write_k1)
-
-            att = self.get_device_attr().get_attr_by_name("k1")
-            multi_prop = PyTango.MultiAttrProp()
-            att.get_properties(multi_prop)
             multi_prop.unit = "m ^-2"
-            multi_prop.description = "k1"
             multi_prop.label = "k1"
+        if self.Type == "csrcsbend":
+            multi_prop.unit = "rad"
+            multi_prop.label = "theta"
 
-            #set alarm levels on k1 (etc) corresponding to the PS alarms, if we have calib data to convert
-            if self.hasCalibData:
-                mink1 = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length,  self.mincurrent)[0]
-                maxk1 = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.Polarity, self.Orientation, self.Tilt, self.Length,  self.maxcurrent)[0]
-                if mink1<maxk1:
-                    multi_prop.min_value=mink1
-                    multi_prop.max_value=maxk1
-                else:
-                    multi_prop.min_value=maxk1
-                    multi_prop.max_value=mink1
 
-            att.set_properties(multi_prop)
+        #set alarm levels on variableComp (etc) corresponding to the PS alarms, if we have calib data to convert
+        if self.hasCalibData:
+            self.debug_stream("xxxxxxxxx getting min field ")
+            minvariableComp = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.mincurrent)[0]
+            self.debug_stream("xxxxxxxxx getting max field ")
+            maxvariableComp = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.maxcurrent)[0]
+            if minvariableComp<maxvariableComp:
+                multi_prop.min_value=minvariableComp
+                multi_prop.max_value=maxvariableComp
+            else:
+                multi_prop.min_value=maxvariableComp
+                multi_prop.max_value=minvariableComp
 
-            #config intk1
-            intk1 = PyTango.Attr('intk1', PyTango.DevDouble, PyTango.READ)
-            self.add_attribute(intk1,MagnetCircuit.read_intk1)
+        att.set_properties(multi_prop)
 
-            att = self.get_device_attr().get_attr_by_name("intk1")
-            multi_prop = PyTango.MultiAttrProp()
-            att.get_properties(multi_prop)
+        #similarly, there is always an integrated (by length) component of the field, different by type
+        intVariableComp = PyTango.Attr('intVariableComp', PyTango.DevDouble, PyTango.READ)
+        self.add_attribute(intVariableComp,MagnetCircuit.read_intVariableComp)
+
+        att = self.get_device_attr().get_attr_by_name("intVariableComp")
+        multi_prop = PyTango.MultiAttrProp()
+        att.get_properties(multi_prop)
+        multi_prop.description = "The length integrated variable component of the field for quadrupoles and sextupoles (k2*l for sextupoles, k1*l for quads). Just theta again for the dipoles"
+
+        if self.Type == "kquad":
             multi_prop.unit = "m ^-1"
-            multi_prop.description = "length integrated k1"
             multi_prop.label = "length integrated k1"
-            att.set_properties(multi_prop)
+        if self.Type == "ksext":
+            multi_prop.unit = "m ^-2"
+            multi_prop.label = "length integrated k2"
+        if self.Type == "csrcsbend":
+            multi_prop.unit = "rad"
+            multi_prop.label = "theta"
+
+
+        att.set_properties(multi_prop)
 
        #Need to deal with other magnet types as well. Mainly a question of setting units correctly.
 
@@ -644,8 +684,8 @@ class MagnetCircuitClass(PyTango.DeviceClass):
         PyTango.SCALAR,
           PyTango.READ_WRITE],
          {
-             'description': "If true, if the energy changes the current is recalculated in order to preserve the current normalised field",
-             'label': "Preserve normalised field if energy changes (re-calculate current)",
+             'description': "If true, if the energy changes the current is recalculated in order to preserve the normalised field",
+             'label': "Re-calc current to preserve norm. field on energy change",
              'unit': "T/F",
          } ],
         'BRho':
