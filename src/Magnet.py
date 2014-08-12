@@ -44,7 +44,7 @@ class Magnet (PyTango.Device_4Impl):
         self.debug_stream("In init_device()")
         self.get_device_properties(self.get_device_class())
 
-        self.debug_stream("Circuit device proxy: %s ", self.CircuitProxies)
+        self.debug_stream("Circuit device proxy: %s " % self.CircuitProxies)
 
         self.status_str_1 = ""
         self.status_str_2 = ""
@@ -61,7 +61,7 @@ class Magnet (PyTango.Device_4Impl):
             self.CircuitDev  = PyTango.DeviceProxy(self.CircuitProxies)
             self.status_str_1 = "Connected to circuit device " + self.CircuitProxies
         except PyTango.DevFailed as e:
-            self.debug_stream("Cannot connect to circuit device " + self.CircuitProxies)
+            self.debug_stream("Cannot connect to circuit device %s " % self.CircuitProxies)
             sys.exit(1)
 
         #if connected try to read field and state
@@ -97,7 +97,7 @@ class Magnet (PyTango.Device_4Impl):
                     self.status_str_2 = "No Interlock"
 
             except PyTango.DevFailed as e:
-                self.debug_stream("Exception getting interlock AttributeProxy ", e)
+                self.debug_stream("Exception getting interlock AttributeProxy %s" % e)
                 self.TempInterlockQuality = PyTango.AttrQuality.ATTR_INVALID
                 self.status_str_2 = "Cannot read specified interlock tag "
 
@@ -129,7 +129,7 @@ class Magnet (PyTango.Device_4Impl):
 
         except PyTango.DevFailed as e:
             self.FieldQuality =  PyTango.AttrQuality.ATTR_INVALID
-            self.debug_stream('Cannot read field from circuit ' + self.PowerSupplyProxy) 
+            self.debug_stream('Cannot read field from circuit %s ' % self.PowerSupplyProxy) 
             if "Cannot read field from circuit" not in self.status_str:
                 self.status_str_3  = "Cannot read field from circuit"
 

@@ -120,10 +120,10 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
                     
             #check finally the calibration data
-            self.debug_stream("Final currents matrix: ")
-            self.debug_stream(self.currentsmatrix)
-            self.debug_stream("Final fields matrix:   ")
-            self.debug_stream(self.fieldsmatrix)
+            #self.debug_stream("Final currents matrix: ")
+            #self.debug_stream(self.currentsmatrix)
+            #self.debug_stream("Final fields matrix:   ")
+            #self.debug_stream(self.fieldsmatrix)
    
         #Check length, tilt, type of actual magnet devices (should all be the same)
         self.Length=-1.0
