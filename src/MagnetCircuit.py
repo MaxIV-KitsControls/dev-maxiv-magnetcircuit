@@ -211,8 +211,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.fieldB = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
         self.fieldANormalised = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
         self.fieldBNormalised = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
-        self.variableComp_r = -1000.0
-        self.variableComp_w = None
+        self.variableComponent_r = -1000.0
+        self.variableComponent_w = None
         self.scaleField=False
         self.calc_current = -1.0
         self.actual_current = - 1.0
@@ -279,7 +279,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.calc_current =  self.ps_device.read_attribute("Current").w_value
 
             if self.hasCalibData:
-                (self.variableComp_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
+                (self.variableComponent_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
                     = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length, self.actual_current)
                 self.status_str_cal = "Field-current calibration data available"
 
@@ -343,27 +343,54 @@ class MagnetCircuit (PyTango.Device_4Impl):
         attr.set_value(self.actual_current)
         attr.set_quality(self.current_quality)
 
+    #Special function to set zeroth element of field vector to zero, as it should be for dipoles
+    #(We use the zeroth element to store theta, but should not be returned)
+    def ConvertDipoleVector(self,vector):
+        returnvector = list(vector)
+        returnvector[0]=0.0
+        return returnvector
+
     def read_fieldA(self, attr):
         self.debug_stream("In read_fieldA()")
-        attr.set_value(self.fieldA)
+        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
+        #BUT in reality zeroth element is zero. See wiki page for details.
+        if self.allowed_component == 0:
+            attr.set_value(self.ConvertDipoleVector(self.fieldA))
+        else:
+            attr.set_value(self.fieldA)
         attr.set_quality(self.current_quality)
         attr.set_quality(self.field_quality)
 
     def read_fieldB(self, attr):
         self.debug_stream("In read_fieldB()")
-        attr.set_value(self.fieldB)
+        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
+        #BUT in reality zeroth element is zero. See wiki page for details.
+        if self.allowed_component == 0:
+            attr.set_value(self.ConvertDipoleVector(self.fieldB))
+        else:
+            attr.set_value(self.fieldB)
         attr.set_quality(self.current_quality)
         attr.set_quality(self.field_quality)
 
     def read_fieldANormalised(self, attr):
         self.debug_stream("In read_fieldANormalised()")
-        attr.set_value(self.fieldANormalised)
+        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
+        #BUT in reality zeroth element is zero. See wiki page for details.
+        if self.allowed_component == 0:
+            attr.set_value(self.ConvertDipoleVector(self.fieldANormalised))
+        else:
+            attr.set_value(self.fieldANormalised)
         attr.set_quality(self.current_quality)
         attr.set_quality(self.field_quality)
 
     def read_fieldBNormalised(self, attr):
         self.debug_stream("In read_fieldBNormalised()")
-        attr.set_value(self.fieldBNormalised)
+        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
+        #BUT in reality zeroth element is zero. See wiki page for details.
+        if self.allowed_component == 0:
+            attr.set_value(self.ConvertDipoleVector(self.fieldBNormalised))
+        else:
+            attr.set_value(self.fieldBNormalised)
         attr.set_quality(self.current_quality)
         attr.set_quality(self.field_quality)
 
@@ -385,9 +412,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 self.debug_stream("Energy (Brho) changed to %f (%f): will recalculate current to preserve field" % (self.energy_r, self.BRho) )
                 #since brho changed, need to recalc the field
                 if self.Tilt == 0:
-                    self.fieldB[self.allowed_component]  = self.variableComp_r * self.BRho
+                    self.fieldB[self.allowed_component]  = self.variableComponent_r * self.BRho
                 else:
-                    self.fieldA[self.allowed_component]  = self.variableComp_r * self.BRho
+                    self.fieldA[self.allowed_component]  = self.variableComponent_r * self.BRho
                 #now find the current if possible
                 if self.hasCalibData:
                     self.calc_current \
@@ -398,10 +425,10 @@ class MagnetCircuit (PyTango.Device_4Impl):
             else:
                 self.debug_stream("Energy changed: will recalculate fields for the PS current")
                 if self.hasCalibData:
-                    (self.variableComp_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
+                    (self.variableComponent_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
                         = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Length, self.actual_current)
-                    #if we changed the read value of variableComp now, change the set value to correspond
-                    self.variableComp_w = self.variableComp_r
+                    #if we changed the read value of variableComponent now, change the set value to correspond
+                    self.variableComponent_w = self.variableComponent_r
         else:
             attr.set_quality(self.current_quality)
 
@@ -418,36 +445,36 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.debug_stream("In read_BRho()")
         attr.set_value(self.BRho)
 
-    def read_variableComp(self, attr):
-        self.debug_stream("In read_variableComp()")
+    def read_variableComponent(self, attr):
+        self.debug_stream("In read_variableComponent()")
         if self.hasCalibData == False:
             attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
         else:
-            attr_variableComp_read = self.variableComp_r
-            attr.set_value(attr_variableComp_read)
-            if self.variableComp_w == None: #true at initialise
-                self.variableComp_w = self.variableComp_r
-            attr.set_write_value(self.variableComp_w)
+            attr_variableComponent_read = self.variableComponent_r
+            attr.set_value(attr_variableComponent_read)
+            if self.variableComponent_w == None: #true at initialise
+                self.variableComponent_w = self.variableComponent_r
+            attr.set_write_value(self.variableComponent_w)
 
-    def read_intVariableComp(self, attr):
-        self.debug_stream("In read_intVariableComp()")
+    def read_intVariableComponent(self, attr):
+        self.debug_stream("In read_intVariableComponent()")
         if self.hasCalibData == False:
             attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
         else:
-            attr_intVariableComp_read = self.variableComp_r * self.Length
-            attr.set_value(attr_intVariableComp_read)
+            attr_intVariableComponent_read = self.variableComponent_r * self.Length
+            attr.set_value(attr_intVariableComponent_read)
 
-    def write_variableComp(self, attr):
-        self.debug_stream("In write_variableComp()")
+    def write_variableComponent(self, attr):
+        self.debug_stream("In write_variableComponent()")
         if self.hasCalibData:
-            attr_variableComp_write=attr.get_write_value()
-            self.variableComp_w = attr_variableComp_write
+            attr_variableComponent_write=attr.get_write_value()
+            self.variableComponent_w = attr_variableComponent_write
             #Note that we set the component of the field vector directly here, but
             #calling calculate_fields will in turn set the whole vector, including this component again
             if self.Tilt == 0:
-                self.fieldB[self.allowed_component]  = attr_variableComp_write * self.BRho
+                self.fieldB[self.allowed_component]  = attr_variableComponent_write * self.BRho
             else:
-                self.fieldA[self.allowed_component]  = attr_variableComp_write * self.BRho
+                self.fieldA[self.allowed_component]  = attr_variableComponent_write * self.BRho
 
             self.calc_current \
                 = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Length, self.fieldA, self.fieldB)
@@ -475,10 +502,10 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
         #there is always a single variable component of the field, but the units and label depend on the magnet type
 
-        variableComp = PyTango.Attr('variableComp', PyTango.DevDouble, PyTango.READ_WRITE)
-        self.add_attribute(variableComp,MagnetCircuit.read_variableComp, MagnetCircuit.write_variableComp)
+        variableComponent = PyTango.Attr('variableComponent', PyTango.DevDouble, PyTango.READ_WRITE)
+        self.add_attribute(variableComponent,MagnetCircuit.read_variableComponent, MagnetCircuit.write_variableComponent)
 
-        att = self.get_device_attr().get_attr_by_name("variableComp")
+        att = self.get_device_attr().get_attr_by_name("variableComponent")
         multi_prop = PyTango.MultiAttrProp()
         att.get_properties(multi_prop)
         multi_prop.description = "The variable component of the field, which depends on the magnet type (k2 for sextupoles, k1 for quads, theta for dipoles)"
@@ -494,26 +521,24 @@ class MagnetCircuit (PyTango.Device_4Impl):
             multi_prop.label = "theta"
 
 
-        #set alarm levels on variableComp (etc) corresponding to the PS alarms, if we have calib data to convert
+        #set alarm levels on variableComponent (etc) corresponding to the PS alarms, if we have calib data to convert
         if self.hasCalibData:
-            self.debug_stream("xxxxxxxxx getting min field ")
-            minvariableComp = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.mincurrent)[0]
-            self.debug_stream("xxxxxxxxx getting max field ")
-            maxvariableComp = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.maxcurrent)[0]
-            if minvariableComp<maxvariableComp:
-                multi_prop.min_value=minvariableComp
-                multi_prop.max_value=maxvariableComp
+            minvariableComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.mincurrent)[0]
+            maxvariableComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.maxcurrent)[0]
+            if minvariableComponent<maxvariableComponent:
+                multi_prop.min_value=minvariableComponent
+                multi_prop.max_value=maxvariableComponent
             else:
-                multi_prop.min_value=maxvariableComp
-                multi_prop.max_value=minvariableComp
+                multi_prop.min_value=maxvariableComponent
+                multi_prop.max_value=minvariableComponent
 
         att.set_properties(multi_prop)
 
         #similarly, there is always an integrated (by length) component of the field, different by type
-        intVariableComp = PyTango.Attr('intVariableComp', PyTango.DevDouble, PyTango.READ)
-        self.add_attribute(intVariableComp,MagnetCircuit.read_intVariableComp)
+        intVariableComponent = PyTango.Attr('intVariableComponent', PyTango.DevDouble, PyTango.READ)
+        self.add_attribute(intVariableComponent,MagnetCircuit.read_intVariableComponent)
 
-        att = self.get_device_attr().get_attr_by_name("intVariableComp")
+        att = self.get_device_attr().get_attr_by_name("intVariableComponent")
         multi_prop = PyTango.MultiAttrProp()
         att.get_properties(multi_prop)
         multi_prop.description = "The length integrated variable component of the field for quadrupoles and sextupoles (k2*l for sextupoles, k1*l for quads). Just theta again for the dipoles"

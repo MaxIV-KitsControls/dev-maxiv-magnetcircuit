@@ -16,7 +16,9 @@ from math import sqrt
 
 _maxdim = 10 #Maximum number of multipole components
 
-def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  poltimesorient, tilt, length, actual_current):
+def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  poltimesorient, tilt, maglen, actual_current):
+
+    #Calculate all field components which will include the one we already set, using actual current in PS
 
     fieldA = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
     fieldB = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
@@ -24,34 +26,38 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
     fieldBNormalised = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
     thiscomponent = 0.0
 
-    #There is an extra sign, 1 for dipoles, -1 for quads and sext
-    sign = -1
-    #in addition, for dipoles do not integrate by length
-    if allowed_component == 0:
-        sign =  1
-        length = 1.0
-
-    #We calculate all field components which will include the one we already set
-    #This uses the actual current in the PS, not the set current
-
     #We set all the field components, not just the allowed one:
     for i in range (0,_maxdim):
 
+        #NB: i=0 for dipoles, 1 for quad, 2 for sext
+        #There is an extra sign, 1 for dipoles, -1 for quads and sext
+        #for dipoles do not integrate by length
+        if i == 0:
+            sign =  1
+            length = 1.0
+        if i == 1:
+            sign =  -1
+            length = maglen
+        if i == 2:
+            sign =  -1
+            length = maglen
+
+
         #For a quad: Given a current we get back k1 * length * BRho
         #k1 * BRho is the element of fieldB, k1 is the element of fieldB_norm
+
         calcfield = sign * poltimesorient * np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length 
         calcfield_norm = calcfield / brho
 
-
         #For a sext: Given a current we get back k2 * length/2 * BRho
         #k2 * BRho is the element of fieldB, k2 is the element of fieldB_norm
-        if allowed_component == 2:
+        if i == 2:
             calcfield      = calcfield*2.0
             calcfield_norm = calcfield_norm*2.0
 
         #For a dip: Given a current we get back theta * BRho
-        #theta * BRho is the element of fieldB, theta is the element of fieldB_norm (some other factor?)
-
+        #NB theta (theta * BRho) is NOT the zeroth element of fieldB (fieldB normalised) but store it there anyway
+        #See wiki page for details
 
         if tilt == 0:
             fieldB[i] = calcfield

@@ -24,3 +24,7 @@
 07-08-2014 Paul Bell
 	* Implement general functionality for all magnet types
 	* v1.1.0
+
+12-08-2014 Paul Bell
+	* RT 5412 (part 1) fix calculation of field vectors for dipole magnets
+	* v1.1.1
