@@ -28,3 +28,7 @@
 12-08-2014 Paul Bell
 	* RT 5412 (part 1) fix calculation of field vectors for dipole magnets
 	* v1.1.1
+
+28-08-2014 Paul Bell
+	* RT 5412 (part 2) allow pos and neg limits on field, fix factor 1000 bug in BRho	
+	* v1.1.2

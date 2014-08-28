@@ -64,8 +64,13 @@ class Magnet (PyTango.Device_4Impl):
             self.debug_stream("Cannot connect to circuit device %s " % self.CircuitProxies)
             sys.exit(1)
 
-        #if connected try to read field and state
-        self.get_circuit_state()
+        #if connected try to read state
+        #self.get_circuit_state()
+        try:
+            self.set_state(self.CircuitDev.State())
+        except PyTango.DevFailed as e:
+            self.status_str_1 = "Cannot get state of circuit device " + self.CircuitProxies
+            self.set_state(PyTango.DevState.FAULT)  
 
         #Get attribute proxy to interlock tag in OPC access device
         #This is a vector of strings of the form [device,tag attribute,description]
@@ -77,7 +82,7 @@ class Magnet (PyTango.Device_4Impl):
         except Exception as e:
             self.interlock_attribute = None
             self.TempInterlockQuality = PyTango.AttrQuality.ATTR_INVALID
-            self.status_str_1 = self.status_str_1 
+            #self.status_str_1 =  self.status_str_1 + "\nCannot read interlock %s " % self.interlock_attribute
 
         #check interlocks
         self.check_interlock()
@@ -104,40 +109,18 @@ class Magnet (PyTango.Device_4Impl):
         else:
             self.status_str_2 =  "No interlock tag specified"
 
-    def get_circuit_state(self):
-
-        self.status_str_3 = ""
-        try:
-            self.set_state(self.CircuitDev.State())
-
-            fieldA_q  = self.CircuitDev.read_attribute("fieldA").quality
-            fieldB_q  = self.CircuitDev.read_attribute("fieldA").quality
-            fieldAN_q = self.CircuitDev.read_attribute("fieldA").quality
-            fieldBN_q = self.CircuitDev.read_attribute("fieldA").quality
-
-            if PyTango.AttrQuality.ATTR_INVALID in [fieldA_q, fieldB_q, fieldAN_q, fieldBN_q]:
-                
-                self.FieldQuality  = PyTango.AttrQuality.ATTR_INVALID
-                self.status_str_3 =  "Fields not calculated by circuit device"
-                    
-            else:
-                self.fieldA = (self.CircuitDev.fieldA)
-                self.fieldB = (self.CircuitDev.fieldB)
-                self.fieldANormalised = (self.CircuitDev.fieldANormalised)
-                self.fieldBNormalised = (self.CircuitDev.fieldBNormalised)
-                self.status_str_3 =  "Fields are calculated by circuit device"
-
-        except PyTango.DevFailed as e:
-            self.FieldQuality =  PyTango.AttrQuality.ATTR_INVALID
-            self.debug_stream('Cannot read field from circuit %s ' % self.PowerSupplyProxy) 
-            if "Cannot read field from circuit" not in self.status_str:
-                self.status_str_3  = "Cannot read field from circuit"
-
-        self.set_status(self.status_str_1 + "\n" + self.status_str_2 + "\n" +  self.status_str_3)        
 
     def always_executed_hook(self):
         self.debug_stream("In always_excuted_hook()")
-        self.get_circuit_state()
+        #self.get_circuit_state() 
+        self.FieldQuality  = PyTango.AttrQuality.ATTR_VALID
+        try:
+            self.set_state(self.CircuitDev.State())
+            self.status_str_1 = "Connected to circuit device " + self.CircuitProxies
+        except PyTango.DevFailed as e:
+            self.status_str_1 = "Cannot get state of circuit device " + self.CircuitProxies
+            self.set_state(PyTango.DevState.FAULT) 
+        self.set_status(self.status_str_1)
         self.check_interlock()
 
     #-----------------------------------------------------------------------------
@@ -146,21 +129,81 @@ class Magnet (PyTango.Device_4Impl):
     
     def read_fieldA(self, attr):
         self.debug_stream("In read_fieldA()")
+        self.status_str_3 = ""
+        try:
+            fieldA_q  = self.CircuitDev.read_attribute("fieldA").quality
+            if PyTango.AttrQuality.ATTR_INVALID == fieldA_q:
+                self.FieldQuality  = PyTango.AttrQuality.ATTR_INVALID
+                self.status_str_3 =  "Field A not calculated by circuit device"
+            else: 
+                self.fieldA = (self.CircuitDev.fieldA)
+                self.status_str_3 =  "Fields calculated by circuit device"
+        except PyTango.DevFailed as e:
+            self.FieldQuality =  PyTango.AttrQuality.ATTR_INVALID
+            self.debug_stream('Cannot read field A from circuit %s ' % self.CircuitProxies) 
+            self.status_str_3  = "Cannot read field A from circuit"
+
+        self.set_status(self.status_str_1 + "\n" + self.status_str_2 + "\n" +  self.status_str_3)       
         attr.set_value(self.fieldA)
         attr.set_quality(self.FieldQuality)
 
     def read_fieldB(self, attr):
         self.debug_stream("In read_fieldB()")
+        self.status_str_3 = ""
+        try:
+            fieldB_q  = self.CircuitDev.read_attribute("fieldB").quality
+            if PyTango.AttrQuality.ATTR_INVALID == fieldB_q:
+                self.FieldQuality  = PyTango.AttrQuality.ATTR_INVALID
+                self.status_str_3 =  "Field B not calculated by circuit device"
+            else:
+                self.fieldB = (self.CircuitDev.fieldB)
+                self.status_str_3 =  "Fields calculated by circuit device"
+        except PyTango.DevFailed as e:
+            self.FieldQuality =  PyTango.AttrQuality.ATTR_INVALID
+            self.debug_stream('Cannot read field B from circuit %s ' % self.CircuitProxies) 
+            self.status_str_3  = "Cannot read field B from circuit"
+
+        self.set_status(self.status_str_1 + "\n" + self.status_str_2 + "\n" +  self.status_str_3)       
         attr.set_value(self.fieldB)
         attr.set_quality(self.FieldQuality)
 
     def read_fieldANormalised(self, attr):
         self.debug_stream("In read_fieldANormalised()")
+        self.status_str_3 = ""
+        try:
+            fieldAN_q  = self.CircuitDev.read_attribute("fieldANormalised").quality
+            if PyTango.AttrQuality.ATTR_INVALID == fieldAN_q:
+                self.FieldQuality  = PyTango.AttrQuality.ATTR_INVALID
+                self.status_str_3 =  "Field A not calculated by circuit device"
+            else:
+                self.fieldANormalised = (self.CircuitDev.fieldANormalised)
+                self.status_str_3 =  "Fields calculated by circuit device"
+        except PyTango.DevFailed as e:
+            self.FieldQuality =  PyTango.AttrQuality.ATTR_INVALID
+            self.debug_stream('Cannot read field A from circuit %s ' % self.CircuitProxies) 
+            self.status_str_3  = "Cannot read field A from circuit"
+
+        self.set_status(self.status_str_1 + "\n" + self.status_str_2 + "\n" +  self.status_str_3)   
         attr.set_value(self.fieldANormalised)
         attr.set_quality(self.FieldQuality)
 
     def read_fieldBNormalised(self, attr):
         self.debug_stream("In read_fieldBNormalised()")
+        self.status_str_3 = ""
+        try:
+            fieldBN_q  = self.CircuitDev.read_attribute("fieldBNormalised").quality
+            if PyTango.AttrQuality.ATTR_INVALID == fieldBN_q:
+                self.FieldQuality  = PyTango.AttrQuality.ATTR_INVALID
+                self.status_str_3 =  "Field B not calculated by circuit device"
+            else:
+                self.fieldBNormalised = (self.CircuitDev.fieldBNormalised)
+                self.status_str_3 =  "Fields calculated by circuit device"
+        except PyTango.DevFailed as e:
+            self.FieldQuality =  PyTango.AttrQuality.ATTR_INVALID
+            self.debug_stream('Cannot read field B from circuit %s ' % self.CircuitProxies) 
+            self.status_str_3  = "Cannot read field B from circuit"
+
+        self.set_status(self.status_str_1 + "\n" + self.status_str_2 + "\n" +  self.status_str_3)   
         attr.set_value(self.fieldBNormalised)
         attr.set_quality(self.FieldQuality)
 

@@ -47,6 +47,7 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
         #k1 * BRho is the element of fieldB, k1 is the element of fieldB_norm
 
         calcfield = sign * poltimesorient * np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length 
+
         calcfield_norm = calcfield / brho
 
         #For a sext: Given a current we get back k2 * length/2 * BRho
@@ -105,9 +106,8 @@ def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, pol
     #yp = [3,2,1]
     #interp(2.5,xp,yp) = 1.5
     #so here xp is the field and yp the current - put in a field value to get the current
-    #BUT xp must be increasing so no good for fields like [-1,-2,-3]
-    #can just make sure sign on Brho is positive, and set fieldsmatrix positive, too!
+    #xp must be increasing hence matrices are ordered
 
-    calc_current = np.interp(np.fabs(intBtimesBRho), np.fabs(fieldsmatrix[allowed_component]), currentsmatrix[allowed_component])
+    calc_current = np.interp(intBtimesBRho, fieldsmatrix[allowed_component], currentsmatrix[allowed_component])
 
     return calc_current
