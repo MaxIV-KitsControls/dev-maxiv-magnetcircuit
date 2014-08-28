@@ -320,10 +320,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
         att.get_properties(multi_prop)
         minvariableComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.mincurrent)[0]
         maxvariableComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.maxcurrent)[0]
-        print "current limit ", self.maxcurrent
-        print "field limit ", maxvariableComponent
-        print "energy and brrho and length ", self.energy_r, self.BRho, self.Length
-        
         if minvariableComponent<maxvariableComponent:
             multi_prop.min_value=minvariableComponent
             multi_prop.max_value=maxvariableComponent
@@ -674,97 +670,97 @@ class MagnetCircuitClass(PyTango.DeviceClass):
           PyTango.SCALAR,
           PyTango.READ],
          {
-             'description': "calculated current",
              'label': "calculated current",
-            'unit': "A",
+             'unit': "A",
+             'description': "calculated current",
          } ],
         'currentActual':
         [[PyTango.DevFloat,
           PyTango.SCALAR,
           PyTango.READ],
          {
-             'description': "actual current on powersupply",
-            'label': "actual current",
+             'label': "actual current",
              'unit': "A",
+             'description': "actual current on powersupply",
          } ],
         'fieldA':
         [[PyTango.DevFloat,
           PyTango.SPECTRUM,
-        PyTango.READ, 10],
+          PyTango.READ, 10],
          {
-             'description': "field A (skew) components",
              'label': "A_n",
              'unit': "T m^1-n",
+             'description': "field A (skew) components",
          } ],
         'fieldB':
         [[PyTango.DevFloat,
           PyTango.SPECTRUM,
           PyTango.READ, 10],
          {
-             'description': "field B (normal) components",
-             'label': "B_n",
-             'unit': "T m^1-n",
-        } ],
+            'label': "B_n",
+            'unit': "T m^1-n",
+            'description': "field B (normal) components",
+         } ],
         'fieldANormalised':
         [[PyTango.DevFloat,
           PyTango.SPECTRUM,
           PyTango.READ, 10],
-         {
-             'description': "field A (skew) normalised components",
-             'label': "e/p A_n",
-             'unit': "m^-n",
+        {
+            'label': "e/p A_n",
+            'unit': "m^-n",
+            'description': "field A (skew) normalised components",
          } ],
         'fieldBNormalised':
         [[PyTango.DevFloat,
           PyTango.SPECTRUM,
           PyTango.READ, 10],
          {
-             'description': "field B (normal) normalised components",
              'label': "e/p B_n",
              'unit': "m^-n",
+             'description': "field B (normal) normalised components",
         } ],
         'energy':
         [[PyTango.DevFloat,
           PyTango.SCALAR,
           PyTango.READ_WRITE],
          {
-             'description': "electron energy",
              'label': "electron energy",
              'unit': "eV",
+             'description': "electron energy",
          } ],
         'fixNormFieldOnEnergyChange':
         [[PyTango.DevBoolean,
         PyTango.SCALAR,
           PyTango.READ_WRITE],
          {
-             'description': "If true, if the energy changes the current is recalculated in order to preserve the normalised field",
-             'label': "Re-calc current to preserve norm. field on energy change",
+             'label': "Preserve norm. field on energy change",
              'unit': "T/F",
+             'description': "If true, if the energy changes the current is recalculated in order to preserve the normalised field",
          } ],
         'BRho':
         [[PyTango.DevFloat,
           PyTango.SCALAR,
           PyTango.READ],
          {
-             'description': "b.rho conversion factor",
              'label': "b.rho",
              'unit': "eV s m^1",
+             'description': "b.rho conversion factor",
          } ],
         'CyclingStatus':
         [[PyTango.DevString,
           PyTango.SCALAR,
           PyTango.READ],
          {
-             'description': "Status of cycling procedure",
              'label': "Cycling Status",
+             'description': "Status of cycling procedure",
          } ],
         'CyclingState':
         [[PyTango.DevBoolean,
           PyTango.SCALAR,
           PyTango.READ],
          {
-             'description': "State of cycling procedure",
              'label': "Cycling State",
+             'description': "State of cycling procedure",
          } ]
     }
 
