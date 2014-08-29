@@ -32,10 +32,12 @@ class Magnet (PyTango.Device_4Impl):
     #--------- Add you global variables here --------------------------
 
     def __init__(self,cl, name):
+        self._state = None
         PyTango.Device_4Impl.__init__(self,cl,name)
         self.debug_stream("In __init__()")
         Magnet.init_device(self)
 
+        self.set_change_event('State', True, False)
        
     def delete_device(self):
         self.debug_stream("In delete_device()")
@@ -87,6 +89,9 @@ class Magnet (PyTango.Device_4Impl):
         #check interlocks
         self.check_interlock()
 
+    def set_state(self, new_state):
+        PyTango.Device_4Impl.set_state(self, new_state)
+        self.push_change_event("State", new_state)
 
     def check_interlock(self):
 
