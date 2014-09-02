@@ -32,3 +32,7 @@
 28-08-2014 Paul Bell
 	* RT 5412 (part 2) allow pos and neg limits on field, fix factor 1000 bug in BRho	
 	* v1.1.2
+
+02-09-2014 Paul Bell
+	* Refactor init method, remove sys.exits
+	* v1.1.3 - submitted for review

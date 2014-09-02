@@ -71,156 +71,15 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.debug_stream("In delete_device()")
 
     def init_device(self):
+
         self.debug_stream("In init_device()")
-        self.get_device_properties(self.get_device_class())
-        self.status_str_ps = ""
-        self.status_str_cal = ""
-        self.status_str_cyc = ""
-        self.cyclingphase = "---"
-        self.cyclingallowed = True
 
-        #Check dimensions of current and field calibration data
-        #(Should be n arrays of field values for n arrays of current values)
-        if  len(self.ExcitationCurveCurrents) != len(self.ExcitationCurveFields):
-            print >> self.log_fatal, 'Incompatible current and field calibration data'
-            sys.exit(1)
-
-        #No information corresponds to [""]
-        self.hasCalibData=False
-        if  self.ExcitationCurveCurrents[0] == '' or  self.ExcitationCurveCurrents[0] == 'not set':
-            self.debug_stream("No calibration data")
-        else:
-            self.hasCalibData=True
-            #Make numpy arrays for field and currents for each multipole component. 
-            #At this point the calibration data are strings with comma separated values. Get the length by counting commas!
-            array_length = self.ExcitationCurveCurrents[0].count(",")+1
-            pos_fieldsmatrix   = np.zeros(shape=(self._maxdim,array_length), dtype=float)
-            pos_currentsmatrix = np.zeros(shape=(self._maxdim,array_length), dtype=float)
-            #Calibration points are for positive currents only, but full calibration curve should go negative. 
-            #Make "reflected" arrays for negative currents and opposite sign on the fields, then merge the two later below
-            neg_fieldsmatrix   = np.zeros(shape=(self._maxdim,array_length-1), dtype=float)
-            neg_currentsmatrix = np.zeros(shape=(self._maxdim,array_length-1), dtype=float)
-            #
-            self.fieldsmatrix   = np.zeros(shape=(self._maxdim,(2*array_length)-1), dtype=float)
-            self.currentsmatrix = np.zeros(shape=(self._maxdim,(2*array_length)-1), dtype=float)
-
-            #Fill the numpy arrays, but first horrible conversion of list of chars to floats
-            self.debug_stream("Multipole dimension %d " % len(self.ExcitationCurveCurrents))
-
-            for i in range (0,len(self.ExcitationCurveCurrents)):
-                MeasuredFields_l = []
-                MeasuredCurrents_l = []
-                #PJB hack since I use a string to start with like "[1,2,3]" No way to store a matrix of floats?
-                if len(self.ExcitationCurveCurrents[i])>0:
-                    #need to sort the currents and fields by absolute values for interpolation to work later
-                    self.MeasuredFields_l   =  sorted([float(x) for x in "".join(self.ExcitationCurveFields[i][1:-1]).split(",")],key=abs)
-                    self.MeasuredCurrents_l =  sorted([float(x) for x in "".join(self.ExcitationCurveCurrents[i][1:-1]).split(",")],key=abs)
-                    pos_currentsmatrix[i]=self.MeasuredCurrents_l
-                    pos_fieldsmatrix[i]=self.MeasuredFields_l
-
-                #Check if the current is zero for the first entry, force the field to be zero as well
-                #for i in range (0,len(self.ExcitationCurveCurrents)):
-                #set zero point
-                if pos_currentsmatrix[i][0] < 0.01:  #check abs?
-                    pos_currentsmatrix[i][0] = 0.0
-                    pos_fieldsmatrix[i][0] = 0.0
-
-                #Also here merge the positive and negative ranges into the final array
-                neg_fieldsmatrix[i]   = (-pos_fieldsmatrix[i][1:])[::-1]
-                neg_currentsmatrix[i] = (-pos_currentsmatrix[i][1:])[::-1]
-                #
-                self.currentsmatrix[i] = np.concatenate((neg_currentsmatrix[i],pos_currentsmatrix[i]),axis=0)
-                self.fieldsmatrix[i]   = np.concatenate((neg_fieldsmatrix[i],pos_fieldsmatrix[i]),axis=0)
-                
-                    
-            #check finally the calibration data
-            #self.debug_stream("Final currents matrix: ")
-            #self.debug_stream(self.currentsmatrix)
-            #self.debug_stream("Final fields matrix:   ")
-            #self.debug_stream(self.fieldsmatrix)
-   
-        #Check length, tilt, type of actual magnet devices (should all be the same)
-        self.Length=-1.0
-        self.Type=""
-        self.Tilt=-1
-        #self.Polarity=1
-        #self.Orientation=1
-        self.PolTimesOrient=1
-
-        #magnet_property_types = {"Length": float, "Tilt": int, "Type": str, "Polarity": int, "Orientation": int}
-        #deal with polarity and orientation separately
-        magnet_property_types = {"Length": float, "Tilt": int, "Type": str}
-        problematic_devices = set()  # let's be optimistic
-        for (i, magnet_device_name) in enumerate(self.MagnetProxies):
-            magnet_device = PyTango.DeviceProxy(magnet_device_name)
-            for prop, type_ in magnet_property_types.items():
-                try:
-                    prop_value = type_(magnet_device.get_property(prop)[prop][0])
-                except IndexError as e:
-                    # undefined property gives an empty list as a value
-                    print >> self.log_fatal, ("Couldn't read property '%s' from magnet device '%s'; "+
-                                              "is it configured properly?") % (prop, magnet_device_name)
-                    problematic_devices.add(magnet_device_name)
-                else:
-                    # we've got the value OK
-                    if i == 0:  # use first magnet as a default
-                        setattr(self, prop, prop_value)
-                    else:
-                        # consistency check; all magnets must have the same values
-                        self_value = getattr(self, prop, None)
-                        if self_value is not None and self_value != prop_value:
-                            print >> self.log_fatal, ('Found magnets of different %s on same circuit (%s)'
-                                                      % (prop, magnet_device_name))
-                            problematic_devices.add(magnet_device_name)
-
-            #special case for polarity and orientation, check only the product
-            newpolarity = int(magnet_device.get_property("Polarity")["Polarity"][0])
-            neworientation = int(magnet_device.get_property("Orientation")["Orientation"][0])
-            newpoltimesorient = newpolarity * neworientation
-            if i == 0:
-                self.PolTimesOrient = newpolarity * neworientation
-                if self.PolTimesOrient != newpoltimesorient:
-                    print >> self.log_fatal, 'Found magnets of different polarity times orientation on same circuit', self.PolTimesOrient, newpoltimesorient, magnet_device_name
-                    problematic_devices.add(magnet_device_name)
-
-        # If there were any issues, we exit since things are not consistent
-        if problematic_devices:
-            print >> self.log_fatal, ('Cannot start due to issues with magnet device(s): %s' %
-                                      ", ".join(problematic_devices))
-            sys.exit(1)
-
-
-        self.debug_stream("Magnet length is %f " % self.Length)
-        self.debug_stream("Magnet type is %s  " %  self.Type)
-        self.debug_stream("Magnet tilt is %d  " % self.Tilt)
-        #self.debug_stream("Magnet polarity is %d    " % self.Polarity)
-        #self.debug_stream("Magnet orientation is %d " % self.Orientation)
-        self.debug_stream("Magnet polarity times orientation is %d " % self.PolTimesOrient)
-
-        #The magnet type determines which row in the numpy array we are interested in to control
-        #Note that in the multipole expansion we have:
-        # 1 - dipole, 2 - quadrupole, 3 - sextupole, 4 - octupole
-        #which of course is row 0-3 in our numpy array
-
-        self.allowed_component = -1
-        if self.Type in ["csrcsbend","hkick","vkick","sole"]:
-            #h and vkick also here using small theta. Large theta for bends.
-            self.allowed_component = 0
-        elif self.Type == "kquad":
-            self.allowed_component = 1
-        elif self.Type == "ksext":
-            self.allowed_component = 2
-        else:
-            print >> self.log_fatal, 'Magnet type invalid'
-            sys.exit(1)
-
-        #Energy needs to be ready from somewhere
-        self.energy_r = 100000000.0 #=100 MeV for testing
+        self.energy_r = 100000000.0 #=100 MeV for testing, needs to be ready from somewhere
         self.energy_w = None
         self.BRho = 1.0      #a conversion factor that depends on energy
         self.calculate_brho()
-
-        #initial values - will update as soon as current is read from PS below
+        
+        #initial values - will update as soon as current is read from PS 
         self.fieldA = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
         self.fieldB = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
         self.fieldANormalised = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
@@ -231,44 +90,204 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.calc_current = -1.0
         self.actual_current = - 1.0
         self.current_quality =  PyTango.AttrQuality.ATTR_VALID
-        self.field_quality =  PyTango.AttrQuality.ATTR_VALID
+        self.field_quality   =  PyTango.AttrQuality.ATTR_VALID
+        self.allowed_component = -1
 
-        #Get the PS device and the actual current. If cannot connect to PS device may as well just exit since probably misconfigured properties.
+        #try to read magnet properties, calibration data and power supply status
         try:
-            self.ps_device = PyTango.DeviceProxy(self.PowerSupplyProxy)
-            self.status_str_ps = "Connected to PS device " + self.PowerSupplyProxy
+            self.get_device_properties(self.get_device_class())
+            self.status_str_ps = ""
+            self.status_str_cal = ""
+            self.status_str_cyc = ""
+            self.cyclingphase = "---"
+            self.cyclingallowed = True
+            
+            #Check dimensions of current and field calibration data
+            #(Should be n arrays of field values for n arrays of current values)
+            self.hasCalibData=False         
+            if  len(self.ExcitationCurveCurrents) != len(self.ExcitationCurveFields):
+                message = 'Incompatible current and field calibration data'
+                print >> self.log_fatal, message
+                self.set_state( PyTango.DevState.FAULT )
+                self.set_status( message )
+            else:
+                #Read calib data from property if exists. No information corresponds to [""]
+                if  self.ExcitationCurveCurrents[0] == '' or  self.ExcitationCurveCurrents[0] == 'not set':
+                    self.debug_stream("No calibration data")
+                else:
+                    self.hasCalibData=True
+                    self.read_calib_data()
+
+            #Check length, tilt, type of actual magnet devices (should all be the same)
+            self.Length=-1.0
+            self.Type=""
+            self.Tilt=-1
+            self.PolTimesOrient=1
+
+            #magnet_property_types = {"Length": float, "Tilt": int, "Type": str, "Polarity": int, "Orientation": int}
+            #deal with polarity and orientation separately
+            magnet_property_types = {"Length": float, "Tilt": int, "Type": str}
+            problematic_devices = set()  # let's be optimistic
+            for (i, magnet_device_name) in enumerate(self.MagnetProxies):
+                magnet_device = PyTango.DeviceProxy(magnet_device_name)
+                for prop, type_ in magnet_property_types.items():
+                    try:
+                        prop_value = type_(magnet_device.get_property(prop)[prop][0])
+                    except IndexError as e:
+                        # undefined property gives an empty list as a value
+                        print >> self.log_fatal, ("Couldn't read property '%s' from magnet device '%s'; "+
+                                                  "is it configured properly?") % (prop, magnet_device_name)
+                        problematic_devices.add(magnet_device_name)
+                    else:
+                        # we've got the value OK
+                        if i == 0:  # use first magnet as a default
+                            setattr(self, prop, prop_value)
+                        else:
+                            # consistency check; all magnets must have the same values
+                            self_value = getattr(self, prop, None)
+                            if self_value is not None and self_value != prop_value:
+                                print >> self.log_fatal, ('Found magnets of different %s on same circuit (%s)'
+                                                          % (prop, magnet_device_name))
+                                problematic_devices.add(magnet_device_name)
+
+                #special case for polarity and orientation, check only the product
+                newpolarity = int(magnet_device.get_property("Polarity")["Polarity"][0])
+                neworientation = int(magnet_device.get_property("Orientation")["Orientation"][0])
+                newpoltimesorient = newpolarity * neworientation
+                if i == 0:
+                    self.PolTimesOrient = newpolarity * neworientation
+                    if self.PolTimesOrient != newpoltimesorient:
+                        print >> self.log_fatal, 'Found magnets of different polarity times orientation on same circuit' + self.PolTimesOrient, newpoltimesorient, magnet_device_name
+                        problematic_devices.add(magnet_device_name)
+
+            # If there were any issues, we exit since things are not consistent
+            if problematic_devices:
+                message = ('Cannot start due to issues with magnet device(s): %s' % ", ".join(problematic_devices))
+                print >> self.log_fatal, message
+                self.set_state( PyTango.DevState.FAULT )
+                self.set_status( message )
+            else:
+                self.debug_stream("Magnet length/type/tile/polarity times orientation :  %f/%s/%d/%d " % (self.Length, self.Type, self.Tilt, self.PolTimesOrient))
+                
+                #The magnet type determines which row in the numpy array we are interested in to control
+                #Note that in the multipole expansion we have:
+                # 1 - dipole, 2 - quadrupole, 3 - sextupole, 4 - octupole
+                #which of course is row 0-3 in our numpy array
+                
+                if self.Type in ["csrcsbend","hkick","vkick","sole"]:
+                    #h and vkick also here using small theta. Large theta for bends.
+                    self.allowed_component = 0
+                elif self.Type == "kquad":
+                    self.allowed_component = 1
+                elif self.Type == "ksext":
+                    self.allowed_component = 2
+                else:
+                    message = 'Magnet type invalid'
+                    print >> self.log_fatal, message
+                    self.set_state( PyTango.DevState.FAULT )
+                    self.set_status( message )
+
+
+            #if not in fault state, ie all properties read correctly, try to contact powersupply
+            if self.get_state() is not PyTango.DevState.FAULT:
+
+                #Get the PS device and the actual current. If cannot connect to PS device may as well just exit since probably misconfigured properties.
+                try:
+                    self.ps_device = PyTango.DeviceProxy(self.PowerSupplyProxy)
+                    self.status_str_ps = "Connected to PS device " + self.PowerSupplyProxy
+
+                    #if connected try to read current and state
+                    self.get_ps_state()
+
+                    #To give consistent starting conditions, now calculate the current given these fields
+                    #i.e. we calculate back the actual current we just read
+                    #Assuming that we have the calib data.
+                    if self.hasCalibData:
+                        self.calc_current \
+                            = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.fieldA, self.fieldB)
+                        
+                    #
+                    #Finally set up cycling machinery
+                    self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
+                    #The cycling varies the current from min and max a number of times.
+                    #Need to get the current limits from the PS device; number of iterations and wait time can be properties
+                    self.maxcurrent = None
+                    self.mincurrent = None
+                    maxcurrent_s = self.ps_device.get_attribute_config("Current").max_value
+                    mincurrent_s = self.ps_device.get_attribute_config("Current").min_value
+                    if maxcurrent_s == 'Not specified' or mincurrent_s == 'Not specified':
+                        self.debug_stream("Current limits not specified, cannot do cycling") #! We assume if there are limits then they are good!
+                        #cycling command should not be allowed
+                        self.cyclingallowed = False
+                        self._cycler = None
+                    else:
+                        self.maxcurrent = float(maxcurrent_s)
+                        self.mincurrent = float(mincurrent_s)
+                        self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 4)
+
+                except PyTango.DevFailed as e:
+                    message = 'Cannot connect to PS %s' % self.PowerSupplyProxy
+                    self.debug_stream( message )
+                    self.set_state( PyTango.DevState.FAULT )
+                    self.set_status( message )
+
         except PyTango.DevFailed as e:
-            self.debug_stream('Cannot connect to PS ' + self.PowerSupplyProxy)
-            sys.exit(1)
+            message = 'Unknown Error'
+            self.debug_stream( message )
+            self.set_state( PyTango.DevState.UNKNOWN )
+            self.set_status( message )
 
-        #if connected try to read current and state
-        self.get_ps_state()
 
-        #To give consistent starting conditions, now calculate the current given these fields
-        #i.e. we calculate back the actual current we just read
-        #Assuming that we have the calib data.
-        if self.hasCalibData:
-            self.calc_current \
-                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.fieldA, self.fieldB)
+    def read_calib_data(self):
 
-        #Finally set up cycling machinery
-        self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
-        #The cycling varies the current from min and max a number of times.
-        #Need to get the current limits from the PS device; number of iterations and wait time can be properties
-        self.maxcurrent = None
-        self.mincurrent = None
-        maxcurrent_s = self.ps_device.get_attribute_config("Current").max_value
-        mincurrent_s = self.ps_device.get_attribute_config("Current").min_value
-        if maxcurrent_s == 'Not specified' or mincurrent_s == 'Not specified':
-            self.debug_stream("Current limits not specified, cannot do cycling")
-            #cycling command should not be allowed
-            self.cyclingallowed = False
-            self._cycler = None
-        #! We assume if there are limits then they are good!
-        else:
-            self.maxcurrent = float(maxcurrent_s)
-            self.mincurrent = float(mincurrent_s)
-            self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 4)
+        #Make numpy arrays for field and currents for each multipole component. 
+        #At this point the calibration data are strings with comma separated values. Get the length by counting commas!
+        array_length = self.ExcitationCurveCurrents[0].count(",")+1
+        pos_fieldsmatrix   = np.zeros(shape=(self._maxdim,array_length), dtype=float)
+        pos_currentsmatrix = np.zeros(shape=(self._maxdim,array_length), dtype=float)
+        #Calibration points are for positive currents only, but full calibration curve should go negative. 
+        #Make "reflected" arrays for negative currents and opposite sign on the fields, then merge the two later below
+        neg_fieldsmatrix   = np.zeros(shape=(self._maxdim,array_length-1), dtype=float)
+        neg_currentsmatrix = np.zeros(shape=(self._maxdim,array_length-1), dtype=float)
+        #
+        self.fieldsmatrix   = np.zeros(shape=(self._maxdim,(2*array_length)-1), dtype=float)
+        self.currentsmatrix = np.zeros(shape=(self._maxdim,(2*array_length)-1), dtype=float)
+        
+        #Fill the numpy arrays, but first horrible conversion of list of chars to floats
+        self.debug_stream("Multipole dimension %d " % len(self.ExcitationCurveCurrents))
+        
+        for i in range (0,len(self.ExcitationCurveCurrents)):
+            MeasuredFields_l = []
+            MeasuredCurrents_l = []
+            #PJB hack since I use a string to start with like "[1,2,3]" No way to store a matrix of floats?
+            if len(self.ExcitationCurveCurrents[i])>0:
+                #need to sort the currents and fields by absolute values for interpolation to work later
+                self.MeasuredFields_l   =  sorted([float(x) for x in "".join(self.ExcitationCurveFields[i][1:-1]).split(",")],key=abs)
+                self.MeasuredCurrents_l =  sorted([float(x) for x in "".join(self.ExcitationCurveCurrents[i][1:-1]).split(",")],key=abs)
+                pos_currentsmatrix[i]=self.MeasuredCurrents_l
+                pos_fieldsmatrix[i]=self.MeasuredFields_l
+                
+            #Check if the current is zero for the first entry, force the field to be zero as well
+            #for i in range (0,len(self.ExcitationCurveCurrents)):
+            #set zero point
+            if pos_currentsmatrix[i][0] < 0.01:  #check abs?
+                pos_currentsmatrix[i][0] = 0.0
+                pos_fieldsmatrix[i][0] = 0.0
+                
+            #Also here merge the positive and negative ranges into the final array
+            neg_fieldsmatrix[i]   = (-pos_fieldsmatrix[i][1:])[::-1]
+            neg_currentsmatrix[i] = (-pos_currentsmatrix[i][1:])[::-1]
+            #
+            self.currentsmatrix[i] = np.concatenate((neg_currentsmatrix[i],pos_currentsmatrix[i]),axis=0)
+            self.fieldsmatrix[i]   = np.concatenate((neg_fieldsmatrix[i],pos_fieldsmatrix[i]),axis=0)
+            
+                    
+        #check finally the calibration data
+        #self.debug_stream("Final currents matrix: ")
+        #self.debug_stream(self.currentsmatrix)
+        #self.debug_stream("Final fields matrix:   ")
+        #self.debug_stream(self.fieldsmatrix)
+   
 
     def get_ps_state(self):
 
@@ -346,20 +365,22 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     def always_executed_hook(self):
         self.debug_stream("In always_excuted_hook()")
-        #Always recalc fields for actual current. If the current changes we need to check how fields change.
-        #NB if we change the i'th component we need to see how other components change as a result
-        self.get_ps_state()
-        #check phase of magnet cycling (if never started any cycling, will return ---)
-        if self.cyclingallowed:
-            self.cyclingphase  = self._cycler.phase
-            #need to check here if we should still be RUNNING, not ideal way, needs refactor since set already in get_ps_state
-            if  self.cyclingphase == "NOT CYCLING":
-                self.change_state(self.ps_device.State())
-        else:
-            self.cyclingphase  = "Cycling not permitted"
 
+        if self.get_state() is not PyTango.DevState.FAULT and self.get_state() is not PyTango.DevState.UNKNOWN:
 
-        self.set_status(self.status_str_ps + "\n" + self.status_str_cal + "\nCycling status: " +  self.cyclingphase)
+            #Always recalc fields for actual current. If the current changes we need to check how fields change.
+            #NB if we change the i'th component we need to see how other components change as a result
+            self.get_ps_state()
+            #check phase of magnet cycling (if never started any cycling, will return ---)
+            if self.cyclingallowed:
+                self.cyclingphase  = self._cycler.phase
+                #need to check here if we should still be RUNNING, not ideal way, needs refactor since set already in get_ps_state
+                if  self.cyclingphase == "NOT CYCLING":
+                    self.change_state(self.ps_device.State())
+            else:
+                self.cyclingphase  = "Cycling not permitted"
+                
+            self.set_status(self.status_str_ps + "\n" + self.status_str_cal + "\nCycling status: " +  self.cyclingphase)
 
     #-----------------------------------------------------------------------------
     #    MagnetCircuit read/write attribute methods
@@ -536,51 +557,54 @@ class MagnetCircuit (PyTango.Device_4Impl):
     #-----------------------------------------------------------------------------
     def initialize_dynamic_attributes(self):
 
-        #there is always a single variable component of the field, but the units and label depend on the magnet type
-        variableComponent = PyTango.Attr('variableComponent', PyTango.DevDouble, PyTango.READ_WRITE)
-        self.add_attribute(variableComponent,MagnetCircuit.read_variableComponent, MagnetCircuit.write_variableComponent)
+        #the init may have failed and left us in fault state, in which case probably miss information to set dyn attributes
+        if self.get_state() is not PyTango.DevState.FAULT and self.get_state() is not PyTango.DevState.UNKNOWN:
 
-        att = self.get_device_attr().get_attr_by_name("variableComponent")
-        multi_prop = PyTango.MultiAttrProp()
-        att.get_properties(multi_prop)
-        multi_prop.description = "The variable component of the field, which depends on the magnet type (k2 for sextupoles, k1 for quads, theta for dipoles)"
+            #there is always a single variable component of the field, but the units and label depend on the magnet type
+            variableComponent = PyTango.Attr('variableComponent', PyTango.DevDouble, PyTango.READ_WRITE)
+            self.add_attribute(variableComponent,MagnetCircuit.read_variableComponent, MagnetCircuit.write_variableComponent)
+            
+            att = self.get_device_attr().get_attr_by_name("variableComponent")
+            multi_prop = PyTango.MultiAttrProp()
+            att.get_properties(multi_prop)
+            multi_prop.description = "The variable component of the field, which depends on the magnet type (k2 for sextupoles, k1 for quads, theta for dipoles)"
+            
+            if self.Type == "ksext":
+                multi_prop.unit = "m ^-3"
+                multi_prop.label = "k2"
+            if self.Type == "kquad":
+                multi_prop.unit = "m ^-2"
+                multi_prop.label = "k1"
+            if self.Type == "csrcsbend":
+                multi_prop.unit = "rad"
+                multi_prop.label = "theta"
+            att.set_properties(multi_prop)
 
-        if self.Type == "ksext":
-            multi_prop.unit = "m ^-3"
-            multi_prop.label = "k2"
-        if self.Type == "kquad":
-            multi_prop.unit = "m ^-2"
-            multi_prop.label = "k1"
-        if self.Type == "csrcsbend":
-            multi_prop.unit = "rad"
-            multi_prop.label = "theta"
-        att.set_properties(multi_prop)
+            #set alarm levels on variableComponent (etc) corresponding to the PS alarms, if we have calib data to convert
+            if self.hasCalibData:
+                self.set_current_limits()
 
-        #set alarm levels on variableComponent (etc) corresponding to the PS alarms, if we have calib data to convert
-        if self.hasCalibData:
-            self.set_current_limits()
+            #similarly, there is always an integrated (by length) component of the field, different by type
+            intVariableComponent = PyTango.Attr('intVariableComponent', PyTango.DevDouble, PyTango.READ)
+            self.add_attribute(intVariableComponent,MagnetCircuit.read_intVariableComponent)
 
-        #similarly, there is always an integrated (by length) component of the field, different by type
-        intVariableComponent = PyTango.Attr('intVariableComponent', PyTango.DevDouble, PyTango.READ)
-        self.add_attribute(intVariableComponent,MagnetCircuit.read_intVariableComponent)
+            att = self.get_device_attr().get_attr_by_name("intVariableComponent")
+            multi_prop = PyTango.MultiAttrProp()
+            att.get_properties(multi_prop)
+            multi_prop.description = "The length integrated variable component of the field for quadrupoles and sextupoles (k2*l for sextupoles, k1*l for quads). Just theta again for the dipoles"
 
-        att = self.get_device_attr().get_attr_by_name("intVariableComponent")
-        multi_prop = PyTango.MultiAttrProp()
-        att.get_properties(multi_prop)
-        multi_prop.description = "The length integrated variable component of the field for quadrupoles and sextupoles (k2*l for sextupoles, k1*l for quads). Just theta again for the dipoles"
+            if self.Type == "kquad":
+                multi_prop.unit = "m ^-1"
+                multi_prop.label = "length integrated k1"
+            if self.Type == "ksext":
+                multi_prop.unit = "m ^-2"
+                multi_prop.label = "length integrated k2"
+            if self.Type == "csrcsbend":
+                multi_prop.unit = "rad"
+                multi_prop.label = "theta"
 
-        if self.Type == "kquad":
-            multi_prop.unit = "m ^-1"
-            multi_prop.label = "length integrated k1"
-        if self.Type == "ksext":
-            multi_prop.unit = "m ^-2"
-            multi_prop.label = "length integrated k2"
-        if self.Type == "csrcsbend":
-            multi_prop.unit = "rad"
-            multi_prop.label = "theta"
-
-        att.set_properties(multi_prop)
-
+            att.set_properties(multi_prop)
+                
 
     #-----------------------------------------------------------------------------
     #    MagnetCircuit command methods
