@@ -58,40 +58,58 @@ class Magnet (PyTango.Device_4Impl):
       
         self.FieldQuality  = PyTango.AttrQuality.ATTR_VALID
 
-        #Get proxy to circuit (only ever one?). If cannot connect may as well exit since probably misconfigured
+        self.TempInterlockQuality = PyTango.AttrQuality.ATTR_VALID
+        self.TempInterlockValue   = False
+        self.TempInterProxy       = None 
+
+        #try to connect to circuit device
+        self.connect_to_circuit()
+
+        #if connected, try to read state
+        self.get_circuit_state()
+
+        #Get attribute proxy to interlock tag in OPC access device
+        self.get_interlock_config()
+
+    def connect_to_circuit:
+        #Get proxy to circuit (only ever one?). 
         try:
             self.CircuitDev  = PyTango.DeviceProxy(self.CircuitProxies)
             self.status_str_1 = "Connected to circuit device " + self.CircuitProxies
         except PyTango.DevFailed as e:
-            self.debug_stream("Cannot connect to circuit device %s " % self.CircuitProxies)
-            sys.exit(1)
-
-        #if connected try to read state
-        #self.get_circuit_state()
-        try:
-            self.set_state(self.CircuitDev.State())
-        except PyTango.DevFailed as e:
-            self.status_str_1 = "Cannot get state of circuit device " + self.CircuitProxies
+            msg = "Cannot connect to circuit device %s " % self.CircuitProxies
+            self.debug_stream(msg)
+            self.status_str_1 = msg
             self.set_state(PyTango.DevState.FAULT)  
+            self.set_status(self.status_str_1)
 
-        #Get attribute proxy to interlock tag in OPC access device
-        #This is a vector of strings of the form [device,tag attribute,description]
-        self.TempInterlockQuality = PyTango.AttrQuality.ATTR_VALID
-        self.TempInterlockValue   = False
-        #First see if we gave any interlock information in the property
-        try:
-            self.interlock_attribute = self.TemperatureInterlock[0]+"/"+ self.TemperatureInterlock[1]
-        except Exception as e:
-            self.interlock_attribute = None
-            self.TempInterlockQuality = PyTango.AttrQuality.ATTR_INVALID
-            #self.status_str_1 =  self.status_str_1 + "\nCannot read interlock %s " % self.interlock_attribute
+    def get_circuit_state():
+        if self.get_state() is not PyTango.DevState.FAULT:
+            try:
+                self.set_state(self.CircuitDev.State())
+            except PyTango.DevFailed as e:
+                msg = "Cannot get state of circuit device " + self.CircuitProxies
+                self.debug_stream(msg)
+                self.status_str_1 = msg
+                self.set_state(PyTango.DevState.FAULT)  
+                self.set_status(self.status_str_1)
 
-        #check interlocks
-        self.check_interlock()
+    def get_interlock_config(self):
+        if self.get_state() is not PyTango.DevState.FAULT:
+            #This is a vector of strings of the form [device,tag attribute,description]
+            #First see if we gave any interlock information in the property
+            try:
+                self.interlock_attribute = self.TemperatureInterlock[0]+"/"+ self.TemperatureInterlock[1]
+                self.TempInterProxy  = PyTango.AttributeProxy(self.interlock_attribute)
+            except Exception as e:
+                self.interlock_attribute = None
+                self.TempInterlockQuality = PyTango.AttrQuality.ATTR_INVALID
+                self.status_str_1 =  "Cannot read interlock %s " % self.interlock_attribute
 
-    def set_state(self, new_state):
-        PyTango.Device_4Impl.set_state(self, new_state)
-        self.push_change_event("State", new_state)
+            #check interlocks
+            self.check_interlock()
+
+
 
     def check_interlock(self):
 
@@ -99,7 +117,7 @@ class Magnet (PyTango.Device_4Impl):
         #If we gave an interlock property, try to get that attribute
         if  self.interlock_attribute is not None:
             try:
-                self.TempInterlockValue  = PyTango.AttributeProxy(self.interlock_attribute).read().value
+                self.TempInterlockValue  = self.TempInterProxy.read().value
                 if self.TempInterlockValue == True:
                     self.status_str_2 = "Interlock is True! " + self.interlock_attribute + " (" + self.TemperatureInterlock[2] + ")"
                     self.set_state(PyTango.DevState.ALARM)  
@@ -115,17 +133,19 @@ class Magnet (PyTango.Device_4Impl):
             self.status_str_2 =  "No interlock tag specified"
 
 
+    def set_state(self, new_state):
+        PyTango.Device_4Impl.set_state(self, new_state)
+        self.push_change_event("State", new_state)
+
+
     def always_executed_hook(self):
+
         self.debug_stream("In always_excuted_hook()")
-        #self.get_circuit_state() 
         self.FieldQuality  = PyTango.AttrQuality.ATTR_VALID
-        try:
-            self.set_state(self.CircuitDev.State())
-            self.status_str_1 = "Connected to circuit device " + self.CircuitProxies
-        except PyTango.DevFailed as e:
-            self.status_str_1 = "Cannot get state of circuit device " + self.CircuitProxies
-            self.set_state(PyTango.DevState.FAULT) 
-        self.set_status(self.status_str_1)
+
+        #get circuit state
+        self.get_circuit_state()
+        #get interlock state
         self.check_interlock()
 
     #-----------------------------------------------------------------------------

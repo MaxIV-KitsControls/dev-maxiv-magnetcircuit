@@ -78,33 +78,53 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.energy_w = None
         self.BRho = 1.0      #a conversion factor that depends on energy
         self.calculate_brho()
-        
-        #initial values - will update as soon as current is read from PS 
-        self.fieldA = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
-        self.fieldB = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
-        self.fieldANormalised = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
-        self.fieldBNormalised = [-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0]
+
+        #depending on the magnet type, variable component can be k1, k2, etc
         self.variableComponent_r = -1000.0
         self.variableComponent_w = None
+        self.allowed_component = -1
+
         self.scaleField=False
         self.calc_current = -1.0
         self.actual_current = - 1.0
         self.current_quality =  PyTango.AttrQuality.ATTR_VALID
         self.field_quality   =  PyTango.AttrQuality.ATTR_VALID
-        self.allowed_component = -1
+
+        #basic magnet properties
+        self.Length=-1.0
+        self.Type=""
+        self.Tilt=-1
+        self.PolTimesOrient=1
+
+        self.status_str_ps = ""
+        self.status_str_cal = ""
+        self.status_str_cyc = ""
+        self.cyclingphase = "---"
+        self.cyclingallowed = True
+        self.hasCalibData=False 
+        self.maxcurrent = None
+        self.mincurrent = None
+
+        #initial values - will update as soon as current is read from PS 
+        self.fieldA = [-1.0] * 10
+        self.fieldB = [-1.0] * 10
+        self.fieldANormalised = [-1.0] * 10
+        self.fieldBNormalised = [-1.0] * 10
+
+        #read the properties from the Tango DB, which will include calibration data
+        self.read_properties()
+
+        #from the PS limits, if available, set field limits and cycling boundaries
+        self.establish_limits()
+
+    def read_properties(self):
 
         #try to read magnet properties, calibration data and power supply status
         try:
             self.get_device_properties(self.get_device_class())
-            self.status_str_ps = ""
-            self.status_str_cal = ""
-            self.status_str_cyc = ""
-            self.cyclingphase = "---"
-            self.cyclingallowed = True
             
             #Check dimensions of current and field calibration data
             #(Should be n arrays of field values for n arrays of current values)
-            self.hasCalibData=False         
             if  len(self.ExcitationCurveCurrents) != len(self.ExcitationCurveFields):
                 message = 'Incompatible current and field calibration data'
                 print >> self.log_fatal, message
@@ -119,11 +139,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
                     self.read_calib_data()
 
             #Check length, tilt, type of actual magnet devices (should all be the same)
-            self.Length=-1.0
-            self.Type=""
-            self.Tilt=-1
-            self.PolTimesOrient=1
-
             #magnet_property_types = {"Length": float, "Tilt": int, "Type": str, "Polarity": int, "Orientation": int}
             #deal with polarity and orientation separately
             magnet_property_types = {"Length": float, "Tilt": int, "Type": str}
@@ -187,55 +202,56 @@ class MagnetCircuit (PyTango.Device_4Impl):
                     self.set_state( PyTango.DevState.FAULT )
                     self.set_status( message )
 
-
-            #if not in fault state, ie all properties read correctly, try to contact powersupply
-            if self.get_state() is not PyTango.DevState.FAULT:
-
-                #Get the PS device and the actual current. If cannot connect to PS device may as well just exit since probably misconfigured properties.
-                try:
-                    self.ps_device = PyTango.DeviceProxy(self.PowerSupplyProxy)
-                    self.status_str_ps = "Connected to PS device " + self.PowerSupplyProxy
-
-                    #if connected try to read current and state
-                    self.get_ps_state()
-
-                    #To give consistent starting conditions, now calculate the current given these fields
-                    #i.e. we calculate back the actual current we just read
-                    #Assuming that we have the calib data.
-                    if self.hasCalibData:
-                        self.calc_current \
-                            = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.fieldA, self.fieldB)
-                        
-                    #
-                    #Finally set up cycling machinery
-                    self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
-                    #The cycling varies the current from min and max a number of times.
-                    #Need to get the current limits from the PS device; number of iterations and wait time can be properties
-                    self.maxcurrent = None
-                    self.mincurrent = None
-                    maxcurrent_s = self.ps_device.get_attribute_config("Current").max_value
-                    mincurrent_s = self.ps_device.get_attribute_config("Current").min_value
-                    if maxcurrent_s == 'Not specified' or mincurrent_s == 'Not specified':
-                        self.debug_stream("Current limits not specified, cannot do cycling") #! We assume if there are limits then they are good!
-                        #cycling command should not be allowed
-                        self.cyclingallowed = False
-                        self._cycler = None
-                    else:
-                        self.maxcurrent = float(maxcurrent_s)
-                        self.mincurrent = float(mincurrent_s)
-                        self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 4)
-
-                except PyTango.DevFailed as e:
-                    message = 'Cannot connect to PS %s' % self.PowerSupplyProxy
-                    self.debug_stream( message )
-                    self.set_state( PyTango.DevState.FAULT )
-                    self.set_status( message )
-
         except PyTango.DevFailed as e:
             message = 'Unknown Error'
             self.debug_stream( message )
             self.set_state( PyTango.DevState.UNKNOWN )
             self.set_status( message )
+
+
+    def establish_limits():
+
+        #if not in fault state, ie all properties read correctly, try to contact powersupply
+        if self.get_state() is not PyTango.DevState.FAULT:
+
+            #Get the PS device and the actual current. If cannot connect to PS device may as well just exit since probably misconfigured properties.
+            try:
+                self.ps_device = PyTango.DeviceProxy(self.PowerSupplyProxy)
+                self.status_str_ps = "Connected to PS device " + self.PowerSupplyProxy
+
+                #if connected try to read current and state
+                self.get_ps_state()
+
+                #To give consistent starting conditions, now calculate the current given these fields
+                #i.e. we calculate back the actual current we just read
+                #Assuming that we have the calib data.
+                if self.hasCalibData:
+                    self.calc_current \
+                        = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.fieldA, self.fieldB)
+                        
+                #
+                #Finally set up cycling machinery
+                self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
+                #The cycling varies the current from min and max a number of times.
+                #Need to get the current limits from the PS device; number of iterations and wait time can be properties
+                maxcurrent_s = self.ps_device.get_attribute_config("Current").max_value
+                mincurrent_s = self.ps_device.get_attribute_config("Current").min_value
+                if maxcurrent_s == 'Not specified' or mincurrent_s == 'Not specified':
+                    self.debug_stream("Current limits not specified, cannot do cycling") #! We assume if there are limits then they are good!
+                    #cycling command should not be allowed
+                    self.cyclingallowed = False
+                    self._cycler = None
+                else:
+                    self.maxcurrent = float(maxcurrent_s)
+                    self.mincurrent = float(mincurrent_s)
+                    self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 4)
+
+            except PyTango.DevFailed as e:
+                message = 'Cannot connect to PS %s' % self.PowerSupplyProxy
+                self.debug_stream( message )
+                self.set_state( PyTango.DevState.FAULT )
+                self.set_status( message )
+
 
 
     def read_calib_data(self):
@@ -325,6 +341,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.current_quality =  PyTango.AttrQuality.ATTR_INVALID
             self.debug_stream('Cannot read current from PS ' + self.PowerSupplyProxy)
             self.status_str_cal = "Cannot read current on PS" + self.PowerSupplyProxy
+
 
     def calculate_brho(self):
         #Bρ = sqrt(T(T+2M0)/(qc0) where M0 = rest mass of the electron in MeV, q = 1 and c0 = speed of light Mm/s (mega m!) Energy is in eV to start.
