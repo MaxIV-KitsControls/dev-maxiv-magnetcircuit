@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from distutils.core import setup
 setup(name = 'tangods-magnetcircuit',
-      version = '1.1.2',
+      version = '1.1.4',
       description = 'Tango device for magnet circuits and magnets',
       package_dir = {'MagnetCircuit':'src', 'MagnetCircuit.MagnetCycling':'src/cycling_statemachine'},
       packages = ['MagnetCircuit', 'MagnetCircuit.cycling_statemachine'],
