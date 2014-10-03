@@ -200,7 +200,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
         att_vc.get_properties(multi_prop_vc)
         multi_prop_vc.description = "The variable component of the field, which depends on the magnet type (k2 for sextupoles, k1 for quads, theta for dipoles)"
 
-
         att_ivc = self.get_device_attr().get_attr_by_name("intVariableComponent")
         multi_prop_ivc = PyTango.MultiAttrProp()
         att_ivc.get_properties(multi_prop_ivc)
@@ -337,6 +336,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.status_str_cyc = "Setup cycling: cannot get proxy to %s " % self.PowerSupplyProxy 
             self.set_state(PyTango.DevState.FAULT)
 
+
     ##############################################################################################################
     #
     def set_current_limits(self):
@@ -366,26 +366,12 @@ class MagnetCircuit (PyTango.Device_4Impl):
             try:
 
                 self.status_str_ps = "Reading current from %s " % self.PowerSupplyProxy  
-                #generally the circuit should echo the ps state. However, during cycling, we want the circuit to be running,
-                #and not moving, but we do want to catch any ps errors
-                ps_state = self.ps_device.State()
-                #if self.get_state() == PyTango.DevState.RUNNING and ps_state in [PyTango.DevState.ON, PyTango.DevState.MOVING]:
-                #    pass
-                #else:
-                #    self.set_state(ps_state)
 
+                ps_state = self.ps_device.State()
                 self.actual_current =  self.ps_device.Current
 
                 #Just assume the calculated current is whatever we wrote to the ps device
                 self.calc_current =  self.ps_device.read_attribute("Current").w_value
-
-                #calculate the fields
-                if self.hasCalibData:
-                    (self.variableComponent_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
-                        = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length, self.actual_current)
-                else:
-                    self.calc_current =   self.actual_current
-                    self._cycler = None
 
             except:
                 self.status_str_ps = "Cannot read current on PS " + self.PowerSupplyProxy
@@ -400,6 +386,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
         return ps_state
 
+
     ##############################################################################################################
     #
     def always_executed_hook(self):
@@ -408,6 +395,13 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #Always recalc fields for actual current. If the current changes we need to check how fields change.
         #NB if we change the i'th component we need to see how other components change as a result
         ps_state = self.get_ps_state_and_current()
+
+        #Generally the circuit should echo the ps state
+        #If we are in RUNNING, ie cycling, stay there unless ps goes to fault
+        if self.get_state() == PyTango.DevState.RUNNING and ps_state in [PyTango.DevState.ON, PyTango.DevState.MOVING]:
+            pass
+        else:
+            self.set_state(ps_state)
         
         #check phase of magnet cycling (if never started any cycling, will return ---)
         #if self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]:
@@ -420,19 +414,19 @@ class MagnetCircuit (PyTango.Device_4Impl):
         else:
             self.cyclingphase  = self._cycler.phase
 
-        #If we are in RUNNING, ie cycling, stay there unless ps goes to fault
-        if self.get_state() == PyTango.DevState.RUNNING and ps_state in [PyTango.DevState.ON, PyTango.DevState.MOVING]:
-            pass
-        else:
-            self.set_state(ps_state)
-
         #need to check here if we should still be RUNNING, not ideal way
         if  self.cyclingphase == "NOT CYCLING":
             self.set_state(ps_state)
 
+        #calculate the fields, since used by many attribute readings
+        if self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT, PyTango.DevState.UNKNOWN]:
+            (self.variableComponent_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
+                = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length, self.actual_current)
+            
         #set status message
         msg = self.status_str_prop +"\n"+ self.status_str_cfg +"\n"+ self.status_str_cal +"\n"+ self.status_str_ps +"\n"+ self.status_str_cyc + "\nCycling status: " +  self.cyclingphase
         self.set_status(os.linesep.join([s for s in msg.splitlines() if s]))
+
 
     ##############################################################################################################
 
