@@ -73,7 +73,6 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
                 #print "Setting this component", fieldA[i]
                 thiscomponent=fieldANormalised[allowed_component]
 
-
     return thiscomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
 
 def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, poltimesorient, tilt, length, fieldA, fieldB):
@@ -108,6 +107,15 @@ def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, pol
     #so here xp is the field and yp the current - put in a field value to get the current
     #xp must be increasing hence matrices are ordered
 
-    calc_current = np.interp(intBtimesBRho, fieldsmatrix[allowed_component], currentsmatrix[allowed_component])
+    #so, if fields starts with a positive sign, reverse both so that fields starts negative
+    if fieldsmatrix[allowed_component][0] > 0.0:
+        fields_o   = fieldsmatrix[allowed_component][::-1]
+        currents_o = currentsmatrix[allowed_component][::-1]
+    else:
+        fields_o   = fieldsmatrix[allowed_component]
+        currents_o = currentsmatrix[allowed_component]
+
+
+    calc_current = np.interp(intBtimesBRho, fields_o, currents_o)
 
     return calc_current

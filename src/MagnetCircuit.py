@@ -78,7 +78,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     def init_device(self):
         self.debug_stream("In init_device()")
-        state = PyTango.DevState.INIT
+        self.set_state(PyTango.DevState.INIT)
 
         self.get_device_properties(self.get_device_class())
 
@@ -113,18 +113,20 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #which of course is row 0-3 in our numpy array
         self.config_type()
 
-        #now read calibration data
-        #if self.get_state() not in [PyTango.DevState.FAULT]:
+        #set limits on current
+        self.set_current_limits()
+
+        #read calibration data
         self.read_calibration_data()
+
+        #set alarm levels on variableComponent (etc) corresponding to the PS alarms
+        if self.hasCalibData:
+            self.set_field_limits()
 
         #from the PS limits, if available, set cycling boundaries
         self.setup_cycler()
 
-        #set alarm levels on variableComponent (etc) corresponding to the PS alarms
-        if self.hasCalibData:
-            self.set_current_limits()
-
-        state = PyTango.DevState.ON 
+        self.set_state(PyTango.DevState.ON)
 
     ###############################################################################
     #
@@ -146,7 +148,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #magnet_property_types = {"Length": float, "Tilt": int, "Type": str, "Polarity": int, "Orientation": int}
         #Deal with polarity and orientation separately
 
-        magnet_property_types = {"Length": float, "Tilt": float, "Type": str}
+        magnet_property_types = {"Length": float, "Tilt": int, "Type": str}
 
         problematic_devices = set()  # let's be optimistic
         for (i, magnet_device_name) in enumerate(self.MagnetProxies):
@@ -294,7 +296,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 if pos_currentsmatrix[i][0] < 0.01:  #check abs?
                     pos_currentsmatrix[i][0] = 0.0
                     pos_fieldsmatrix[i][0] = 0.0
-                
+                #force current to be zero for first entry? NEED TO CHECK FOR BC1
+                #pos_currentsmatrix[i][0] = 0.0
+
                 #Also here merge the positive and negative ranges into the final array
                 neg_fieldsmatrix[i]   = (-pos_fieldsmatrix[i][1:])[::-1]
                 neg_currentsmatrix[i] = (-pos_currentsmatrix[i][1:])[::-1]
@@ -315,23 +319,18 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
         self._cycler = None
         self.status_str_cyc = ""
-        if self.ps_device:
-            try:
-                self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
-                #The cycling varies the current from min and max a number of times.
-                #Need to get the current limits from the PS device; number of iterations and wait time can be properties
-                maxcurrent_s = self.ps_device.get_attribute_config("Current").max_value
-                mincurrent_s = self.ps_device.get_attribute_config("Current").min_value
-                if maxcurrent_s == 'Not specified' or mincurrent_s == 'Not specified':
-                    self.debug_stream("Current limits not specified, cannot do cycling") #! We assume if there are limits then they are good!
-                else:
-                    self.maxcurrent = float(maxcurrent_s)
-                    self.mincurrent = float(mincurrent_s)
-                    self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 4)
-            except:
-                self.status_str_cyc = 'Setup cycling: cannot read current limits from PS ' + self.PowerSupplyProxy
-                self.debug_stream(self.status_str_cyc)
 
+        #The cycling varies the current from min and max a number of times.
+        #Need to get the current limits from the PS device; number of iterations and wait time can be properties
+
+        if self.maxcurrent == None or self.mincurrent == None:
+            self.status_str_cyc = 'Setup cycling: cannot read current limits from PS ' + self.PowerSupplyProxy
+            self.debug_stream(self.status_str_cyc)
+            return
+
+        if self.ps_device:
+            self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
+            self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 4)
         else:
             self.status_str_cyc = "Setup cycling: cannot get proxy to %s " % self.PowerSupplyProxy 
             self.set_state(PyTango.DevState.FAULT)
@@ -341,7 +340,27 @@ class MagnetCircuit (PyTango.Device_4Impl):
     #
     def set_current_limits(self):
 
-        if self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]:
+        self.mincurrent = self.maxcurrent = None
+        try:
+
+            maxcurrent_s = self.ps_device.get_attribute_config("Current").max_value
+            mincurrent_s = self.ps_device.get_attribute_config("Current").min_value
+
+            if maxcurrent_s == 'Not specified' or mincurrent_s == 'Not specified':
+                self.debug_stream("Current limits not specified, cannot do cycling") #! We assume if there are limits then they are good!
+
+            else:
+                self.maxcurrent = float(maxcurrent_s)
+                self.mincurrent = float(mincurrent_s)
+                
+        except (AttributeError, PyTango.DevFailed):
+            self.debug_stream("Cannot read current limits from PS " + self.PowerSupplyProxy)
+
+    ##############################################################################################################
+    #
+    def set_field_limits(self):
+
+        if self.maxcurrent != None and self.mincurrent != None:
 
             #Set the limits on the variable component (k1 etc) which will change if the energy changes
             att = self.get_device_attr().get_attr_by_name("variableComponent")
@@ -355,8 +374,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             else:
                 multi_prop.min_value=maxvariableComponent
                 multi_prop.max_value=minvariableComponent
-            att.set_properties(multi_prop)
-
+                att.set_properties(multi_prop)
 
     ##############################################################################################################
     #
@@ -377,11 +395,13 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 self.status_str_ps = "Cannot read current on PS " + self.PowerSupplyProxy
                 self.debug_stream(self.status_str_ps)
                 self._cycler = None
+                self.cyclingphase = "Cycling not set up"
                 ps_state = PyTango.DevState.FAULT
 
         else:
             self.status_str_ps = "Read current:  cannot get proxy to " + self.PowerSupplyProxy 
-            self._cycler = None
+            self._cycler = None   
+            self.cyclingphase = "Cycling not set up"
             ps_state = PyTango.DevState.FAULT
 
         return ps_state
@@ -403,11 +423,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
         else:
             self.set_state(ps_state)
         
-        #check phase of magnet cycling (if never started any cycling, will return ---)
-        #if self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]:
-        #if self._cycler is None: #if cycler is none since lost PS communication, try to get it back
-        #   self.setup_cycler()
+        #check phase of magnet cycling (may need to setup cycler again)
         if self._cycler is None: 
+            self.set_current_limits()
             self.setup_cycler()
         if self._cycler is None: 
             self.cyclingphase  = "Cycling not set up"
@@ -422,7 +440,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         if self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT, PyTango.DevState.UNKNOWN]:
             (self.variableComponent_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
                 = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length, self.actual_current)
-            
+
         #set status message
         msg = self.status_str_prop +"\n"+ self.status_str_cfg +"\n"+ self.status_str_cal +"\n"+ self.status_str_ps +"\n"+ self.status_str_cyc + "\nCycling status: " +  self.cyclingphase
         self.set_status(os.linesep.join([s for s in msg.splitlines() if s]))
@@ -552,7 +570,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
         #If energy changes, limits on k1 etc will also change
         if self.hasCalibData:
-            self.set_current_limits()
+            self.set_field_limits()
 
         #If energy changes, current or field must also change
         #Only do something if the current from the PS is known

@@ -25,6 +25,7 @@ __all__ = ["Magnet", "MagnetClass", "main"]
 __docformat__ = 'restructuredtext'
 
 import PyTango
+import os
 import sys
 
 class Magnet (PyTango.Device_4Impl):
@@ -43,110 +44,122 @@ class Magnet (PyTango.Device_4Impl):
         self.debug_stream("In delete_device()")
 
     def init_device(self):
-        self.debug_stream("In init_device()")
+        self.debug_stream("In init_device()")        
+        self.set_state(PyTango.DevState.INIT)
+
         self.get_device_properties(self.get_device_class())
 
+        #Proxy to power supply device
         self.debug_stream("Circuit device proxy: %s " % self.CircuitProxies)
+        self._circuit_device = None
 
-        self.status_str_1 = ""
-        self.status_str_2 = ""
-        self.status_str_3 = ""
-        self.fieldA           = []
-        self.fieldANormalised = []
-        self.fieldB           = []
-        self.fieldBNormalised = []
-      
-        self.FieldQuality  = PyTango.AttrQuality.ATTR_VALID
+        #Some status strings
+        self.status_str_ilock = ""
+        self.status_str_field = ""
 
-        self.TempInterlockQuality = PyTango.AttrQuality.ATTR_VALID
-        self.TempInterlockValue   = False
-        self.TempInterProxy       = None 
-
-        #try to connect to circuit device
-        self.connect_to_circuit()
-
-        #if connected, try to read state
-        self.get_circuit_state()
-
-        #Get attribute proxy to interlock tag in OPC access device
+        #interlock config
+        self.interlock_descs   = {}
+        self.interlock_proxies = {}
+        self.bad_Ilock_config = False
         self.get_interlock_config()
 
-    def connect_to_circuit:
-        #Get proxy to circuit (only ever one?). 
-        try:
-            self.CircuitDev  = PyTango.DeviceProxy(self.CircuitProxies)
-            self.status_str_1 = "Connected to circuit device " + self.CircuitProxies
-        except PyTango.DevFailed as e:
-            msg = "Cannot connect to circuit device %s " % self.CircuitProxies
-            self.debug_stream(msg)
-            self.status_str_1 = msg
-            self.set_state(PyTango.DevState.FAULT)  
-            self.set_status(self.status_str_1)
+        self.set_state(PyTango.DevState.ON)
 
-    def get_circuit_state():
-        if self.get_state() is not PyTango.DevState.FAULT:
+    ###############################################################################
+    #
+    @property
+    def circuit_device(self):
+        if self._circuit_device is None:
             try:
-                self.set_state(self.CircuitDev.State())
-            except PyTango.DevFailed as e:
-                msg = "Cannot get state of circuit device " + self.CircuitProxies
-                self.debug_stream(msg)
-                self.status_str_1 = msg
-                self.set_state(PyTango.DevState.FAULT)  
-                self.set_status(self.status_str_1)
+                self._circuit_device = PyTango.DeviceProxy(self.CircuitProxies)
+            except (PyTango.DevFailed, PyTango.ConnectionFailed) as df:
+                self.debug_stream("Failed to get circuit proxy\n" + df[0].desc)
+                self.set_state(PyTango.DevState.FAULT)
+        return self._circuit_device
 
+    ###############################################################################
+    #
     def get_interlock_config(self):
-        if self.get_state() is not PyTango.DevState.FAULT:
-            #This is a vector of strings of the form [device,tag attribute,description]
-            #First see if we gave any interlock information in the property
-            try:
-                self.interlock_attribute = self.TemperatureInterlock[0]+"/"+ self.TemperatureInterlock[1]
-                self.TempInterProxy  = PyTango.AttributeProxy(self.interlock_attribute)
-            except Exception as e:
-                self.interlock_attribute = None
-                self.TempInterlockQuality = PyTango.AttrQuality.ATTR_INVALID
-                self.status_str_1 =  "Cannot read interlock %s " % self.interlock_attribute
+        #This is a list of strings of the form [(device,attribute,description),(dev,att,desc)...]
+        #First see if we gave any interlock information in the property
+        if self.TemperatureInterlock !=  [ "" ]:
+            for s in self.TemperatureInterlock:
+                try:
+                    s_l = s.split(",")
+                    ilock_att   = s_l[0]+"/"+s_l[1]
+                    ilock_desc  = s_l[2]
+                    ilock_proxy = PyTango.AttributeProxy(ilock_att)
+                    self.interlock_descs[ilock_att]=ilock_desc
+                    self.interlock_proxies[ilock_att]=ilock_proxy
+                except (IndexError, PyTango.DevFailed) as e:
+                    self.debug_stream("Exception configuring interlocks %s " % self.TemperatureInterlock)
+                    #if we fail to configure one interlock, don't configure any
+                    self.bad_Ilock_config = True
+             
+        else:
+            self.debug_stream("No interlock tags specified in properties")
 
-            #check interlocks
-            self.check_interlock()
-
-
-
+    ###############################################################################
+    #
     def check_interlock(self):
 
-        self.status_str_2 = ""
-        #If we gave an interlock property, try to get that attribute
-        if  self.interlock_attribute is not None:
+        #If we have some interlock attributes, see how they are set
+        if self.TemperatureInterlock !=  [ "" ]:
+            self.status_str_ilock = ""
+            if self.bad_Ilock_config:
+                self.status_str_ilock =  "Interlock tag specified but interlock proxies could not be configured"
+                return
             try:
-                self.TempInterlockValue  = self.TempInterProxy.read().value
-                if self.TempInterlockValue == True:
-                    self.status_str_2 = "Interlock is True! " + self.interlock_attribute + " (" + self.TemperatureInterlock[2] + ")"
-                    self.set_state(PyTango.DevState.ALARM)  
-                else:
-                    self.status_str_2 = "No Interlock"
+                for key in self.interlock_proxies:
+                    print "here"
+                    TempInterlockValue  = self.interlock_proxies[key].read().value
+                    if TempInterlockValue == True:
+                        self.status_str_ilock = self.status_str_ilock + "\nTemperature Interlock Set! " + key + " (" + self.interlock_descs[key] + ")"
+                        self.set_state(PyTango.DevState.ALARM)  
 
+            except (IndexError, PyTango.DevFailed) as e:
+                self.debug_stream("Exception reading interlock AttributeProxy")
+                self.status_str_ilock = "Cannot read specified interlock tag (s) "
+        else:
+            self.status_str_ilock =  "No temperature interlock tags specified in properties"
+
+
+    ###############################################################################
+    #
+    def get_circuit_state(self):
+
+        if self.circuit_device:
+            try:
+                cir_state = self.circuit_device.State()
+                self.status_str_cir = "Connected to circuit %s in state %s " % (self.CircuitProxies, cir_state)
+                
             except PyTango.DevFailed as e:
-                self.debug_stream("Exception getting interlock AttributeProxy %s" % e)
-                self.TempInterlockQuality = PyTango.AttrQuality.ATTR_INVALID
-                self.status_str_2 = "Cannot read specified interlock tag "
+                self.status_str_cir = "Cannot get state of circuit device " + self.CircuitProxies
+                self.debug_stream(self.status_str_cir)
+                cir_state =PyTango.DevState.FAULT  
 
         else:
-            self.status_str_2 =  "No interlock tag specified"
+            self.status_str_cir = "Cannot get proxy to " + self.CircuitProxies
+            cir_state = PyTango.DevState.FAULT
 
+        return cir_state
 
-    def set_state(self, new_state):
-        PyTango.Device_4Impl.set_state(self, new_state)
-        self.push_change_event("State", new_state)
-
-
+    ###############################################################################
+    #
     def always_executed_hook(self):
 
         self.debug_stream("In always_excuted_hook()")
-        self.FieldQuality  = PyTango.AttrQuality.ATTR_VALID
 
-        #get circuit state
-        self.get_circuit_state()
+        #set state according to circuit state
+        self.set_state(self.get_circuit_state())
+
         #get interlock state
         self.check_interlock()
+
+        #set status message
+        msg = self.status_str_cir +"\n"+ self.status_str_ilock +"\n"+ self.status_str_field
+        self.set_status(os.linesep.join([s for s in msg.splitlines() if s]))
+
 
     #-----------------------------------------------------------------------------
     #    Magnet read/write attribute methods
@@ -154,91 +167,77 @@ class Magnet (PyTango.Device_4Impl):
     
     def read_fieldA(self, attr):
         self.debug_stream("In read_fieldA()")
-        self.status_str_3 = ""
+        self.status_str_field = ""
         try:
-            fieldA_q  = self.CircuitDev.read_attribute("fieldA").quality
-            if PyTango.AttrQuality.ATTR_INVALID == fieldA_q:
-                self.FieldQuality  = PyTango.AttrQuality.ATTR_INVALID
-                self.status_str_3 =  "Field A not calculated by circuit device"
-            else: 
-                self.fieldA = (self.CircuitDev.fieldA)
-                self.status_str_3 =  "Fields calculated by circuit device"
+            #fieldA_q  = self.CircuitDev.read_attribute("fieldA").quality
+            #if PyTango.AttrQuality.ATTR_INVALID == fieldA_q:
+            #    self.status_str_field =  "Field A not calculated by circuit device"
+            #else: 
+            self.fieldA = (self.circuit_device.fieldA)
+            #self.status_str_field =  "Fields calculated by circuit device"
         except PyTango.DevFailed as e:
-            self.FieldQuality =  PyTango.AttrQuality.ATTR_INVALID
             self.debug_stream('Cannot read field A from circuit %s ' % self.CircuitProxies) 
-            self.status_str_3  = "Cannot read field A from circuit"
-
-        self.set_status(self.status_str_1 + "\n" + self.status_str_2 + "\n" +  self.status_str_3)       
+            self.status_str_field = "Cannot read field A from circuit"
         attr.set_value(self.fieldA)
-        attr.set_quality(self.FieldQuality)
 
+    def is_fieldA_allowed(self, attr):
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+  
     def read_fieldB(self, attr):
         self.debug_stream("In read_fieldB()")
-        self.status_str_3 = ""
+        self.status_str_field = ""
         try:
-            fieldB_q  = self.CircuitDev.read_attribute("fieldB").quality
-            if PyTango.AttrQuality.ATTR_INVALID == fieldB_q:
-                self.FieldQuality  = PyTango.AttrQuality.ATTR_INVALID
-                self.status_str_3 =  "Field B not calculated by circuit device"
-            else:
-                self.fieldB = (self.CircuitDev.fieldB)
-                self.status_str_3 =  "Fields calculated by circuit device"
+            #fieldB_q  = self.CircuitDev.read_attribute("fieldB").quality
+            #if PyTango.AttrQuality.ATTR_INVALID == fieldB_q:
+            #    self.status_str_field =  "Field B not calculated by circuit device"
+            #else:
+            self.fieldB = (self.circuit_device.fieldB)
+            #self.status_str_field =  "Fields calculated by circuit device"
         except PyTango.DevFailed as e:
-            self.FieldQuality =  PyTango.AttrQuality.ATTR_INVALID
             self.debug_stream('Cannot read field B from circuit %s ' % self.CircuitProxies) 
-            self.status_str_3  = "Cannot read field B from circuit"
-
-        self.set_status(self.status_str_1 + "\n" + self.status_str_2 + "\n" +  self.status_str_3)       
+            self.status_str_field  = "Cannot read field B from circuit"
         attr.set_value(self.fieldB)
-        attr.set_quality(self.FieldQuality)
+
+    def is_fieldB_allowed(self, attr):
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
 
     def read_fieldANormalised(self, attr):
         self.debug_stream("In read_fieldANormalised()")
-        self.status_str_3 = ""
+        self.status_str_field = ""
         try:
-            fieldAN_q  = self.CircuitDev.read_attribute("fieldANormalised").quality
-            if PyTango.AttrQuality.ATTR_INVALID == fieldAN_q:
-                self.FieldQuality  = PyTango.AttrQuality.ATTR_INVALID
-                self.status_str_3 =  "Field A not calculated by circuit device"
-            else:
-                self.fieldANormalised = (self.CircuitDev.fieldANormalised)
-                self.status_str_3 =  "Fields calculated by circuit device"
+            #fieldAN_q  = self.CircuitDev.read_attribute("fieldANormalised").quality
+            #if PyTango.AttrQuality.ATTR_INVALID == fieldAN_q:
+            #    self.status_str_field =  "Field A not calculated by circuit device"
+            #else:
+            self.fieldANormalised = (self.circuit_device.fieldANormalised)
+            #self.status_str_field =  "Fields calculated by circuit device"
         except PyTango.DevFailed as e:
-            self.FieldQuality =  PyTango.AttrQuality.ATTR_INVALID
             self.debug_stream('Cannot read field A from circuit %s ' % self.CircuitProxies) 
-            self.status_str_3  = "Cannot read field A from circuit"
-
-        self.set_status(self.status_str_1 + "\n" + self.status_str_2 + "\n" +  self.status_str_3)   
+            self.status_str_field  = "Cannot read field A from circuit"
         attr.set_value(self.fieldANormalised)
-        attr.set_quality(self.FieldQuality)
+
+    def is_fieldANormalised_allowed(self, attr):
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
 
     def read_fieldBNormalised(self, attr):
         self.debug_stream("In read_fieldBNormalised()")
-        self.status_str_3 = ""
+        self.status_str_field = ""
         try:
-            fieldBN_q  = self.CircuitDev.read_attribute("fieldBNormalised").quality
-            if PyTango.AttrQuality.ATTR_INVALID == fieldBN_q:
-                self.FieldQuality  = PyTango.AttrQuality.ATTR_INVALID
-                self.status_str_3 =  "Field B not calculated by circuit device"
-            else:
-                self.fieldBNormalised = (self.CircuitDev.fieldBNormalised)
-                self.status_str_3 =  "Fields calculated by circuit device"
+            #fieldBN_q  = self.CircuitDev.read_attribute("fieldBNormalised").quality
+            #3if PyTango.AttrQuality.ATTR_INVALID == fieldBN_q:
+            #    self.status_str_field =  "Field B not calculated by circuit device"
+            #else:
+            self.fieldBNormalised = (self.circuit_device.fieldBNormalised)
+            #self.status_str_field =  "Fields calculated by circuit device"
         except PyTango.DevFailed as e:
-            self.FieldQuality =  PyTango.AttrQuality.ATTR_INVALID
             self.debug_stream('Cannot read field B from circuit %s ' % self.CircuitProxies) 
-            self.status_str_3  = "Cannot read field B from circuit"
-
-        self.set_status(self.status_str_1 + "\n" + self.status_str_2 + "\n" +  self.status_str_3)   
+            self.status_str_field  = "Cannot read field B from circuit"
         attr.set_value(self.fieldBNormalised)
-        attr.set_quality(self.FieldQuality)
 
-    def read_temperatureInterlock(self, attr):
-        self.debug_stream("In read_temperatureInterlock()")
-        attr.set_value(self.TempInterlockValue)
-        attr.set_quality(self.TempInterlockQuality)
+    def is_fieldBNormalised_allowed(self, attr):
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
 
-    def read_attr_hardware(self, data):
-        self.debug_stream("In read_attr_hardware()")
+
 
     #-----------------------------------------------------------------------------
     #    Magnet command methods
@@ -256,34 +255,34 @@ class MagnetClass(PyTango.DeviceClass):
     #Device Properties
     device_property_list = {
         'CircuitProxies':
-            [PyTango.DevString,
-            "Associated circuit",
-            [ "not set" ] ],
+        [PyTango.DevString,
+         "Associated circuit",
+         [ "not set" ] ],
         'Length':
-            [PyTango.DevFloat,
-            "Length",
-            [ 0.0 ] ],
+        [PyTango.DevFloat,
+         "Length",
+         [ 0.0 ] ],
         'Polarity':
-            [PyTango.DevShort,
-            "Polarity",
-            [ 1 ] ],
+        [PyTango.DevShort,
+         "Polarity",
+         [ 1 ] ],
         'Orientation':
-            [PyTango.DevShort,
-            "Orientation",
-            [ 1 ] ],
+        [PyTango.DevShort,
+         "Orientation",
+         [ 1 ] ],
         'Tilt':
-            [PyTango.DevShort,
-            "Tilt",
-            [ 0 ] ],
+        [PyTango.DevShort,
+         "Tilt",
+         [ 0 ] ],
         'Type':
-            [PyTango.DevString,
-            "Type",
-            [ "" ] ],
+        [PyTango.DevString,
+         "Type",
+         [ "" ] ], 
         'TemperatureInterlock':
-            [PyTango.DevVarStringArray,
-            "TemperatureInterlock",
-            [ "" ] ],
-        }
+        [PyTango.DevVarStringArray,
+         "TemperatureInterlock",
+         [ "" ] ],
+    }
 
 
     #Command definitions
@@ -294,60 +293,42 @@ class MagnetClass(PyTango.DeviceClass):
     #Attribute definitions
     attr_list = {
         'fieldA':
-            [[PyTango.DevFloat,
-              PyTango.SPECTRUM,
-              PyTango.READ, 10],
-             {
-                'description': "field A (skew) components",
-		'label': "A_n",
-                'unit': "T m^1-n",
-                } ],
+        [[PyTango.DevFloat,
+          PyTango.SPECTRUM,
+          PyTango.READ, 10],
+         {
+             'description': "field A (skew) components",
+             'label': "A_n",
+             'unit': "T m^1-n",
+         } ],
         'fieldB':
-            [[PyTango.DevFloat,
-              PyTango.SPECTRUM,
-              PyTango.READ, 10],
-             {
-                'description': "field B (normal) components",
-		'label': "B_n",
-                'unit': "T m^1-n",
-                } ],
+        [[PyTango.DevFloat,
+          PyTango.SPECTRUM,
+          PyTango.READ, 10],
+         {
+             'description': "field B (normal) components",
+             'label': "B_n",
+             'unit': "T m^1-n",
+         } ],
         'fieldANormalised':
-            [[PyTango.DevFloat,
-              PyTango.SPECTRUM,
-              PyTango.READ, 10],
-             {
-                'description': "field A (skew) normalised components",
-		'label': "e/p A_n",
-                'unit': "m^-n",
-                } ],
+        [[PyTango.DevFloat,
+          PyTango.SPECTRUM,
+          PyTango.READ, 10],
+         {
+             'description': "field A (skew) normalised components",
+             'label': "e/p A_n",
+             'unit': "m^-n",
+         } ],
         'fieldBNormalised':
-            [[PyTango.DevFloat,
-              PyTango.SPECTRUM,
-              PyTango.READ, 10],
-             {
-                'description': "field B (normal) normalised components",
-		'label': "e/p B_n",
-                'unit': "m^-n",
-                } ],
-        'temperatureInterlock':
-            [[PyTango.DevBoolean,
-              PyTango.SCALAR,
-              PyTango.READ],
-             {
-                'description': "temperature interlock from PLC device",
-		'label': "temperature interlock",
-                'unit': "T/F",
-                } ],
-        #'energy':
-        #    [[PyTango.DevFloat,
-        #      PyTango.SCALAR,
-        #      PyTango.READ_WRITE],
-        #     {
-        #        'description': "electron energy",
-	#	'label': "electron energy",
-        #        'unit': "MeV",
-        #       } ],
-        }
+        [[PyTango.DevFloat,
+          PyTango.SPECTRUM,
+          PyTango.READ, 10],
+         {
+             'description': "field B (normal) normalised components",
+             'label': "e/p B_n",
+             'unit': "m^-n",
+         } ]
+}
 
 
 def main():
