@@ -38,8 +38,6 @@ class Magnet (PyTango.Device_4Impl):
         self.debug_stream("In __init__()")
         Magnet.init_device(self)
 
-        self.set_change_event('State', True, False)
-       
     def delete_device(self):
         self.debug_stream("In delete_device()")
 
@@ -103,6 +101,7 @@ class Magnet (PyTango.Device_4Impl):
     #
     def check_interlock(self):
 
+        self.isInterlocked = False
         #If we have some interlock attributes, see how they are set
         if self.TemperatureInterlock !=  [ "" ]:
             self.status_str_ilock = ""
@@ -111,11 +110,11 @@ class Magnet (PyTango.Device_4Impl):
                 return
             try:
                 for key in self.interlock_proxies:
-                    print "here"
                     TempInterlockValue  = self.interlock_proxies[key].read().value
                     if TempInterlockValue == True:
                         self.status_str_ilock = self.status_str_ilock + "\nTemperature Interlock Set! " + key + " (" + self.interlock_descs[key] + ")"
                         self.set_state(PyTango.DevState.ALARM)  
+                        self.isInterlocked = True
 
             except (IndexError, PyTango.DevFailed) as e:
                 self.debug_stream("Exception reading interlock AttributeProxy")
@@ -237,7 +236,9 @@ class Magnet (PyTango.Device_4Impl):
     def is_fieldBNormalised_allowed(self, attr):
         return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
 
-
+    def read_temperatureInterlock(self, attr):
+        self.debug_stream("In read_temperatureInterlock()")
+        attr.set_value(self.isInterlocked)
 
     #-----------------------------------------------------------------------------
     #    Magnet command methods
@@ -327,6 +328,15 @@ class MagnetClass(PyTango.DeviceClass):
              'description': "field B (normal) normalised components",
              'label': "e/p B_n",
              'unit': "m^-n",
+         } ],
+        'temperatureInterlock':
+        [[PyTango.DevBoolean,
+          PyTango.SCALAR,
+          PyTango.READ],
+         {
+             'description': "temperature interlock from PLC device",
+             'label': "temperature interlock",
+             'unit': "T/F",
          } ]
 }
 
