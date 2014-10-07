@@ -20,10 +20,10 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
 
     #Calculate all field components which will include the one we already set, using actual current in PS
 
-    fieldA = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
-    fieldB = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
-    fieldANormalised = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
-    fieldBNormalised = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
+    fieldA = [np.NAN]*10
+    fieldB = [np.NAN]*10
+    fieldANormalised = [np.NAN]*10
+    fieldBNormalised = [np.NAN]*10
     thiscomponent = 0.0
 
     #We set all the field components, not just the allowed one:
@@ -41,7 +41,6 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
         if i == 2:
             sign =  -1
             length = maglen
-
 
         #For a quad: Given a current we get back k1 * length * BRho
         #k1 * BRho is the element of fieldB, k1 is the element of fieldB_norm

@@ -87,7 +87,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.calculate_brho() #a conversion factor that depends on energy
 
         #depending on the magnet type, variable component can be k1, k2, etc
-        self.variableComponent_w = None
+        self.MainFieldComponent_w = None
 
         #sets whether field is scaled with energy
         self.scaleField=False
@@ -119,7 +119,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #read calibration data
         self.read_calibration_data()
 
-        #set alarm levels on variableComponent (etc) corresponding to the PS alarms
+        #set alarm levels on MainFieldComponent (etc) corresponding to the PS alarms
         if self.hasCalibData:
             self.set_field_limits()
 
@@ -197,12 +197,12 @@ class MagnetCircuit (PyTango.Device_4Impl):
     #
     def config_type(self):
             
-        att_vc = self.get_device_attr().get_attr_by_name("variableComponent")
+        att_vc = self.get_device_attr().get_attr_by_name("MainFieldComponent")
         multi_prop_vc = PyTango.MultiAttrProp()
         att_vc.get_properties(multi_prop_vc)
         multi_prop_vc.description = "The variable component of the field, which depends on the magnet type (k2 for sextupoles, k1 for quads, theta for dipoles)"
 
-        att_ivc = self.get_device_attr().get_attr_by_name("intVariableComponent")
+        att_ivc = self.get_device_attr().get_attr_by_name("IntMainFieldComponent")
         multi_prop_ivc = PyTango.MultiAttrProp()
         att_ivc.get_properties(multi_prop_ivc)
         multi_prop_ivc.description = "The length integrated variable component of the field for quadrupoles and sextupoles (k2*l for sextupoles, k1*l for quads). Just theta again for the dipoles"
@@ -266,17 +266,19 @@ class MagnetCircuit (PyTango.Device_4Impl):
             #Make numpy arrays for field and currents for each multipole component. 
             #At this point the calibration data are strings with comma separated values. Get the length by counting commas!
             array_length = self.ExcitationCurveCurrents[0].count(",")+1
-            pos_fieldsmatrix   = np.zeros(shape=(self._maxdim,array_length), dtype=float)
-            pos_currentsmatrix = np.zeros(shape=(self._maxdim,array_length), dtype=float)
+            pos_fieldsmatrix   = np.empty(shape=(self._maxdim,array_length), dtype=float)
+            pos_currentsmatrix = np.empty(shape=(self._maxdim,array_length), dtype=float)
 
             #Calibration points are for positive currents only, but full calibration curve should go negative. 
             #Make "reflected" arrays for negative currents and opposite sign on the fields, then merge the two later below
-            neg_fieldsmatrix   = np.zeros(shape=(self._maxdim,array_length-1), dtype=float)
-            neg_currentsmatrix = np.zeros(shape=(self._maxdim,array_length-1), dtype=float)
+            neg_fieldsmatrix   = np.empty(shape=(self._maxdim,array_length-1), dtype=float)
+            neg_currentsmatrix = np.empty(shape=(self._maxdim,array_length-1), dtype=float)
 
-            self.fieldsmatrix   = np.zeros(shape=(self._maxdim,(2*array_length)-1), dtype=float)
-            self.currentsmatrix = np.zeros(shape=(self._maxdim,(2*array_length)-1), dtype=float)
-            
+            self.fieldsmatrix   = np.empty(shape=(self._maxdim,(2*array_length)-1), dtype=float)
+            self.currentsmatrix = np.empty(shape=(self._maxdim,(2*array_length)-1), dtype=float)
+            self.fieldsmatrix[:] = np.NAN
+            self.currentsmatrix[:] = np.NAN
+
             #Fill the numpy arrays, but first horrible conversion of list of chars to floats
             self.debug_stream("Multipole dimension %d " % len(self.ExcitationCurveCurrents))
             
@@ -363,17 +365,17 @@ class MagnetCircuit (PyTango.Device_4Impl):
         if self.maxcurrent != None and self.mincurrent != None:
 
             #Set the limits on the variable component (k1 etc) which will change if the energy changes
-            att = self.get_device_attr().get_attr_by_name("variableComponent")
+            att = self.get_device_attr().get_attr_by_name("MainFieldComponent")
             multi_prop = PyTango.MultiAttrProp()
             att.get_properties(multi_prop)
-            minvariableComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.mincurrent)[0]
-            maxvariableComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.maxcurrent)[0]
-            if minvariableComponent<maxvariableComponent:
-                multi_prop.min_value=minvariableComponent
-                multi_prop.max_value=maxvariableComponent
+            minMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.mincurrent)[0]
+            maxMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.maxcurrent)[0]
+            if minMainFieldComponent<maxMainFieldComponent:
+                multi_prop.min_value=minMainFieldComponent
+                multi_prop.max_value=maxMainFieldComponent
             else:
-                multi_prop.min_value=maxvariableComponent
-                multi_prop.max_value=minvariableComponent
+                multi_prop.min_value=maxMainFieldComponent
+                multi_prop.max_value=minMainFieldComponent
                 att.set_properties(multi_prop)
 
     ##############################################################################################################
@@ -438,7 +440,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
         #calculate the fields, since used by many attribute readings
         if self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT, PyTango.DevState.UNKNOWN]:
-            (self.variableComponent_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
+            (self.MainFieldComponent_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
                 = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length, self.actual_current)
 
         #set status message
@@ -578,9 +580,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.debug_stream("Energy (Brho) changed to %f (%f): will recalculate current to preserve field" % (self.energy_r, self.BRho) )
             #since brho changed, need to recalc the field
             if self.Tilt == 0:
-                self.fieldB[self.allowed_component]  = self.variableComponent_r * self.BRho
+                self.fieldB[self.allowed_component]  = self.MainFieldComponent_r * self.BRho
             else:
-                self.fieldA[self.allowed_component]  = self.variableComponent_r * self.BRho
+                self.fieldA[self.allowed_component]  = self.MainFieldComponent_r * self.BRho
             #now find the current if possible
             if self.hasCalibData:
                 self.calc_current \
@@ -591,10 +593,10 @@ class MagnetCircuit (PyTango.Device_4Impl):
         else:
             self.debug_stream("Energy changed: will recalculate fields for the PS current")
             if self.hasCalibData:
-                (self.variableComponent_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
+                (self.MainFieldComponent_r, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
                     = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Length, self.actual_current)
-                #if we changed the read value of variableComponent now, change the set value to correspond
-                self.variableComponent_w = self.variableComponent_r
+                #if we changed the read value of MainFieldComponent now, change the set value to correspond
+                self.MainFieldComponent_w = self.MainFieldComponent_r
 
     def is_energy_allowed(self, attr):
         return self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
@@ -619,26 +621,26 @@ class MagnetCircuit (PyTango.Device_4Impl):
         
     #
 
-    def read_variableComponent(self, attr):
-        self.debug_stream("In read_variableComponent()")
+    def read_MainFieldComponent(self, attr):
+        self.debug_stream("In read_MainFieldComponent()")
         if self.hasCalibData == True:
-            attr_variableComponent_read = self.variableComponent_r
-            attr.set_value(attr_variableComponent_read)
-            if self.variableComponent_w == None: #true at initialise
-                self.variableComponent_w = self.variableComponent_r
-            attr.set_write_value(self.variableComponent_w)
+            attr_MainFieldComponent_read = self.MainFieldComponent_r
+            attr.set_value(attr_MainFieldComponent_read)
+            if self.MainFieldComponent_w == None: #true at initialise
+                self.MainFieldComponent_w = self.MainFieldComponent_r
+            attr.set_write_value(self.MainFieldComponent_w)
 
-    def write_variableComponent(self, attr):
-        self.debug_stream("In write_variableComponent()")
+    def write_MainFieldComponent(self, attr):
+        self.debug_stream("In write_MainFieldComponent()")
         if self.hasCalibData:
-            attr_variableComponent_write=attr.get_write_value()
-            self.variableComponent_w = attr_variableComponent_write
+            attr_MainFieldComponent_write=attr.get_write_value()
+            self.MainFieldComponent_w = attr_MainFieldComponent_write
             #Note that we set the component of the field vector directly here, but
             #calling calculate_fields will in turn set the whole vector, including this component again
             if self.Tilt == 0:
-                self.fieldB[self.allowed_component]  = attr_variableComponent_write * self.BRho
+                self.fieldB[self.allowed_component]  = attr_MainFieldComponent_write * self.BRho
             else:
-                self.fieldA[self.allowed_component]  = attr_variableComponent_write * self.BRho
+                self.fieldA[self.allowed_component]  = attr_MainFieldComponent_write * self.BRho
 
             self.calc_current \
                 = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Length, self.fieldA, self.fieldB)
@@ -646,18 +648,18 @@ class MagnetCircuit (PyTango.Device_4Impl):
             #Set the current on the ps
             self.set_current()
 
-    def is_variableComponent_allowed(self, attr):
+    def is_MainFieldComponent_allowed(self, attr):
         return self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
 
     #
 
-    def read_intVariableComponent(self, attr):
-        self.debug_stream("In read_intVariableComponent()")
+    def read_IntMainFieldComponent(self, attr):
+        self.debug_stream("In read_IntMainFieldComponent()")
         if self.hasCalibData == True:
-            attr_intVariableComponent_read = self.variableComponent_r * self.Length
-            attr.set_value(attr_intVariableComponent_read)
+            attr_IntMainFieldComponent_read = self.MainFieldComponent_r * self.Length
+            attr.set_value(attr_IntMainFieldComponent_read)
 
-    def is_intVariableComponent_allowed(self, attr):
+    def is_IntMainFieldComponent_allowed(self, attr):
         return self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
 
     #
@@ -802,6 +804,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
          {
              'label': "electron energy",
              'unit': "eV",
+             'format': "%6.2e",
              'description': "electron energy",
          } ],
         'fixNormFieldOnEnergyChange':
@@ -838,13 +841,13 @@ class MagnetCircuitClass(PyTango.DeviceClass):
              'label': "Cycling State",
              'description': "State of cycling procedure",
          } ],
-        'variableComponent':
+        'MainFieldComponent':
         [[PyTango.DevDouble,
           PyTango.SCALAR,
           PyTango.READ_WRITE],
          {
          } ],
-        'intVariableComponent':
+        'IntMainFieldComponent':
         [[PyTango.DevDouble,
           PyTango.SCALAR,
           PyTango.READ],
