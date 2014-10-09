@@ -16,9 +16,11 @@ from math import sqrt
 
 _maxdim = 10 #Maximum number of multipole components
 
-def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  poltimesorient, tilt, maglen, actual_current):
+def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  poltimesorient, tilt, maglen, actual_current, set_current=None, is_sole=False):
 
+    #print " +++++++++++ in CF +++++++++++++++ ", set_current, is_sole
     #Calculate all field components which will include the one we already set, using actual current in PS
+    #Allowed component is zero for solenoids and dipoles, but need to distinguish between them with ugly is_sole flag
 
     fieldA = [np.NAN]*10
     fieldB = [np.NAN]*10
@@ -31,7 +33,7 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
 
         #NB: i=0 for dipoles, 1 for quad, 2 for sext
         #There is an extra sign, 1 for dipoles, -1 for quads and sext
-        #for dipoles do not integrate by length
+        #for dipoles and solenoids do not integrate by length
         if i == 0:
             sign =  1
             length = 1.0
@@ -46,45 +48,65 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
         #k1 * BRho is the element of fieldB, k1 is the element of fieldB_norm
 
         calcfield = sign * poltimesorient * np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length 
-
         calcfield_norm = calcfield / brho
 
+        if set_current is not None:
+            setfield = sign * poltimesorient * np.interp(set_current, currentsmatrix[i], fieldsmatrix[i]) / length 
+        else:
+            setfield = np.NAN
+        setfield_norm  = setfield / brho
+            
         #For a sext: Given a current we get back k2 * length/2 * BRho
         #k2 * BRho is the element of fieldB, k2 is the element of fieldB_norm
         if i == 2:
             calcfield      = calcfield*2.0
             calcfield_norm = calcfield_norm*2.0
+            setfield_norm  = setfield_norm*2.0
 
         #For a dip: Given a current we get back theta * BRho
         #NB theta (theta * BRho) is NOT the zeroth element of fieldB (fieldB normalised) but store it there anyway
         #See wiki page for details
+
+        #For a sole, get back B_s directly, no scaling by brho
 
         if tilt == 0:
             fieldB[i] = calcfield
             fieldBNormalised[i] = calcfield_norm
             if i==allowed_component:
                 #print "Setting this component", fieldB[i] 
-                thiscomponent=fieldBNormalised[allowed_component]
+                thiscomponent=calcfield_norm
+                thissetcomponent=setfield_norm
+                if is_sole:
+                    thiscomponent = calcfield
+                    thissetcomponent=setfield
+
         else:
             fieldA[i] = calcfield 
             fieldANormalised[i] = calcfield_norm 
             if i==allowed_component:
                 #print "Setting this component", fieldA[i]
-                thiscomponent=fieldANormalised[allowed_component]
+                thiscomponent=calcfield_norm
+                thissetcomponent=setfield_norm
+                if is_sole:
+                    thiscomponent = calcfield
+                    thissetcomponent=setfield
 
-    return thiscomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
+    return thiscomponent, thissetcomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
 
-def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, poltimesorient, tilt, length, fieldA, fieldB):
+def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, poltimesorient, tilt, length, fieldA, fieldB, is_sole=False):
     
+
+    #print " +++++++++++ in CF +++++++++++++++ ", fieldB, is_sole
     #For quad: given k1 * length * BRho (call it intBtimesBRho) we get a current
     #For sext: given k2 * length/2.0 * BRho (call it intBtimesBRho) we get a current
     #for dip   given theta *  BRho (call it intBtimesBRho) we get a current
+    #For sole, given bs we get a current
 
     #For quad: k1 * BRho is the element of fieldB
 
     #There is an extra sign, 1 for dipoles, -1 for quads and sext
     sign = -1
-    #in addition, for dipoles do not integrate by length
+    #in addition, for dipoles and solenoids do not integrate by length
     if allowed_component == 0:
         sign =  1
         length = 1.0
@@ -96,6 +118,10 @@ def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, pol
         
     if allowed_component == 2:
             intBtimesBRho  = intBtimesBRho/2.0
+
+    #if a solenoid, no brho factor
+    if is_sole:
+        intBtimesBRho = intBtimesBRho / brho
 
     #Use numpy to interpolate. We only deal with the allowed component. Assume no need to extrapolate
 

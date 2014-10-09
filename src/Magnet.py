@@ -298,7 +298,6 @@ class MagnetClass(PyTango.DeviceClass):
           PyTango.SPECTRUM,
           PyTango.READ, 10],
          {
-             'description': "field A (skew) components",
              'label': "A_n",
              'unit': "T m^1-n",
          } ],
@@ -307,7 +306,6 @@ class MagnetClass(PyTango.DeviceClass):
           PyTango.SPECTRUM,
           PyTango.READ, 10],
          {
-             'description': "field B (normal) components",
              'label': "B_n",
              'unit': "T m^1-n",
          } ],
@@ -316,7 +314,6 @@ class MagnetClass(PyTango.DeviceClass):
           PyTango.SPECTRUM,
           PyTango.READ, 10],
          {
-             'description': "field A (skew) normalised components",
              'label': "e/p A_n",
              'unit': "m^-n",
          } ],
@@ -325,7 +322,6 @@ class MagnetClass(PyTango.DeviceClass):
           PyTango.SPECTRUM,
           PyTango.READ, 10],
          {
-             'description': "field B (normal) normalised components",
              'label': "e/p B_n",
              'unit': "m^-n",
          } ],
@@ -334,11 +330,10 @@ class MagnetClass(PyTango.DeviceClass):
           PyTango.SCALAR,
           PyTango.READ],
          {
-             'description': "temperature interlock from PLC device",
              'label': "temperature interlock",
              'unit': "T/F",
          } ]
-}
+    }
 
 
 def main():
