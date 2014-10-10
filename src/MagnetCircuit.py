@@ -437,11 +437,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #NB if we change the i'th component we need to see how other components change as a result
         ps_state = self.get_ps_state_and_current()
 
-        #calculate the actual and set fields, since used by many attribute readings
-        if self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT, PyTango.DevState.UNKNOWN]:
-            (self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
-                = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length, self.actual_current, self.set_current, self.is_sole)
-
         #check phase of magnet cycling (may need to setup cycler again)
         if self._cycler is None: 
             self.set_current_limits()
@@ -464,6 +459,12 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #set status message
         msg = self.status_str_prop +"\n"+ self.status_str_cfg +"\n"+ self.status_str_cal +"\n"+ self.status_str_ps +"\n"+ self.status_str_cyc + "\nCycling status: " +  self.cyclingphase
         self.set_status(os.linesep.join([s for s in msg.splitlines() if s]))
+
+
+        #calculate the actual and set fields, since used by many attribute readings
+        if self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT, PyTango.DevState.UNKNOWN]:
+            (self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
+                = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length, self.actual_current, self.set_current, self.is_sole)
 
 
     ##############################################################################################################
