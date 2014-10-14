@@ -174,10 +174,13 @@ class Magnet (PyTango.Device_4Impl):
             #else: 
             self.fieldA = (self.circuit_device.fieldA)
             #self.status_str_field =  "Fields calculated by circuit device"
+            attr.set_quality(PyTango.AttrQuality.VALID)
+            attr.set_value(self.fieldA)
         except PyTango.DevFailed as e:
             self.debug_stream('Cannot read field A from circuit %s ' % self.CircuitProxies) 
             self.status_str_field = "Cannot read field A from circuit"
-        attr.set_value(self.fieldA)
+            attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
+
 
     def is_fieldA_allowed(self, attr):
         return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
@@ -192,10 +195,14 @@ class Magnet (PyTango.Device_4Impl):
             #else:
             self.fieldB = (self.circuit_device.fieldB)
             #self.status_str_field =  "Fields calculated by circuit device"
+            attr.set_quality(PyTango.AttrQuality.VALID)
+            attr.set_value(self.fieldB)
         except PyTango.DevFailed as e:
             self.debug_stream('Cannot read field B from circuit %s ' % self.CircuitProxies) 
             self.status_str_field  = "Cannot read field B from circuit"
-        attr.set_value(self.fieldB)
+            attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
+
+
 
     def is_fieldB_allowed(self, attr):
         return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
@@ -210,10 +217,13 @@ class Magnet (PyTango.Device_4Impl):
             #else:
             self.fieldANormalised = (self.circuit_device.fieldANormalised)
             #self.status_str_field =  "Fields calculated by circuit device"
+            attr.set_quality(PyTango.AttrQuality.VALID)
+            attr.set_value(self.fieldANormalised)
         except PyTango.DevFailed as e:
             self.debug_stream('Cannot read field A from circuit %s ' % self.CircuitProxies) 
             self.status_str_field  = "Cannot read field A from circuit"
-        attr.set_value(self.fieldANormalised)
+            attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
+
 
     def is_fieldANormalised_allowed(self, attr):
         return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
@@ -228,10 +238,12 @@ class Magnet (PyTango.Device_4Impl):
             #else:
             self.fieldBNormalised = (self.circuit_device.fieldBNormalised)
             #self.status_str_field =  "Fields calculated by circuit device"
+            attr.set_quality(PyTango.AttrQuality.VALID)
+            attr.set_value(self.fieldBNormalised)
         except PyTango.DevFailed as e:
             self.debug_stream('Cannot read field B from circuit %s ' % self.CircuitProxies) 
             self.status_str_field  = "Cannot read field B from circuit"
-        attr.set_value(self.fieldBNormalised)
+            attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
 
     def is_fieldBNormalised_allowed(self, attr):
         return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
