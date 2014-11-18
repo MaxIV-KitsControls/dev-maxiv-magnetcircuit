@@ -150,7 +150,7 @@ class MagnetCircuitQuadTestCase(DeviceTestCase):
                 return cls.magnet_proxies[devname]
             return cls.ps_proxy
 
-        cls.device_proxy = MagnetCircuit.DeviceProxy = MagicMock(side_effect=proxy_result)
+        cls.device_proxy = MagnetCircuit.PyTango.DeviceProxy = MagicMock(side_effect=proxy_result)
 
     def test_state_on_when_ps_is_on(self):
         self.ps_proxy.State.return_value = PyTango.DevState.ON
