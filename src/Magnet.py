@@ -27,6 +27,7 @@ __docformat__ = 'restructuredtext'
 import PyTango
 import os
 import sys
+from MagnetCircuit import MagnetCircuitClass, MagnetCircuit
 
 class Magnet (PyTango.Device_4Impl):
 
@@ -174,7 +175,7 @@ class Magnet (PyTango.Device_4Impl):
             #else: 
             self.fieldA = (self.circuit_device.fieldA)
             #self.status_str_field =  "Fields calculated by circuit device"
-            attr.set_quality(PyTango.AttrQuality.VALID)
+            attr.set_quality(PyTango.AttrQuality.ATTR_VALID)
             attr.set_value(self.fieldA)
         except PyTango.DevFailed as e:
             self.debug_stream('Cannot read field A from circuit %s ' % self.CircuitProxies) 
@@ -195,7 +196,7 @@ class Magnet (PyTango.Device_4Impl):
             #else:
             self.fieldB = (self.circuit_device.fieldB)
             #self.status_str_field =  "Fields calculated by circuit device"
-            attr.set_quality(PyTango.AttrQuality.VALID)
+            attr.set_quality(PyTango.AttrQuality.ATTR_VALID)
             attr.set_value(self.fieldB)
         except PyTango.DevFailed as e:
             self.debug_stream('Cannot read field B from circuit %s ' % self.CircuitProxies) 
@@ -217,7 +218,7 @@ class Magnet (PyTango.Device_4Impl):
             #else:
             self.fieldANormalised = (self.circuit_device.fieldANormalised)
             #self.status_str_field =  "Fields calculated by circuit device"
-            attr.set_quality(PyTango.AttrQuality.VALID)
+            attr.set_quality(PyTango.AttrQuality.ATTR_VALID)
             attr.set_value(self.fieldANormalised)
         except PyTango.DevFailed as e:
             self.debug_stream('Cannot read field A from circuit %s ' % self.CircuitProxies) 
@@ -238,7 +239,7 @@ class Magnet (PyTango.Device_4Impl):
             #else:
             self.fieldBNormalised = (self.circuit_device.fieldBNormalised)
             #self.status_str_field =  "Fields calculated by circuit device"
-            attr.set_quality(PyTango.AttrQuality.VALID)
+            attr.set_quality(PyTango.AttrQuality.ATTR_VALID)
             attr.set_value(self.fieldBNormalised)
         except PyTango.DevFailed as e:
             self.debug_stream('Cannot read field B from circuit %s ' % self.CircuitProxies) 
@@ -352,6 +353,7 @@ def main():
     try:
         py = PyTango.Util(sys.argv)
         py.add_class(MagnetClass,Magnet,'Magnet')
+        py.add_class(MagnetCircuitClass, MagnetCircuit,'MagnetCircuit')
 
         U = PyTango.Util.instance()
         U.server_init()

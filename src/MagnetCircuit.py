@@ -176,8 +176,16 @@ class MagnetCircuit (PyTango.Device_4Impl):
                             problematic_devices.add(magnet_device_name)
 
             #special case for polarity and orientation, check only the product
-            newpolarity       = int(magnet_device.get_property("Polarity")["Polarity"][0])
-            neworientation    = int(magnet_device.get_property("Orientation")["Orientation"][0])
+            try:
+                newpolarity = int(magnet_device.get_property("Polarity")["Polarity"][0])
+            except (IndexError,PyTango.DevFailed):
+                newpolarity = 1
+                
+            try:
+                neworientation = int(magnet_device.get_property("Orientation")["Orientation"][0])
+            except (IndexError, PyTango.DevFailed):
+                neworientation = 1
+
             newpoltimesorient = newpolarity * neworientation
             if i == 0:
                 self.PolTimesOrient = newpolarity * neworientation
@@ -385,8 +393,13 @@ class MagnetCircuit (PyTango.Device_4Impl):
             att = self.get_device_attr().get_attr_by_name("MainFieldComponent")
             multi_prop = PyTango.MultiAttrProp()
             att.get_properties(multi_prop)
+
+
             minMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.mincurrent, is_sole=self.is_sole)[0]
             maxMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length,  self.maxcurrent, is_sole=self.is_sole)[0]
+
+            #print "calc min  limit for ", self.mincurrent, minMainFieldComponent
+            #print "calc max  limit for ", self.maxcurrent, maxMainFieldComponent
 
             if minMainFieldComponent<maxMainFieldComponent:
                 multi_prop.min_value=minMainFieldComponent
@@ -479,7 +492,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     def calculate_brho(self):
         #Bρ = sqrt(T(T+2M0)/(qc0) where M0 = rest mass of the electron in MeV, q = 1 and c0 = speed of light Mm/s (mega m!) Energy is in eV to start.
-        self.BRho = sqrt( self.energy_r/1000000.0 * (self.energy_r/1000000.0 + (2 * 0.000511) ) ) / (300.0)
+        self.BRho = sqrt( self.energy_r/1000000.0 * (self.energy_r/1000000.0 + (2 * 0.000510998910) ) ) / (299.792458)
 
 
     def set_ps_current(self):
