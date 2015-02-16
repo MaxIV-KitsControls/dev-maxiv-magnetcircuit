@@ -12,13 +12,13 @@
 
 
 import numpy as np
-from math import sqrt
+from math import sqrt, factorial
 
 _maxdim = 10 #Maximum number of multipole components
 
 def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  poltimesorient, tilt, maglen, actual_current, set_current=None, is_sole=False):
 
-    #print " +++++++++++ in CF +++++++++++++++ ", set_current, is_sole
+    #print " +++++++++++ in CF +++++++++++++++ ", actual_current, set_current, is_sole
     #Calculate all field components which will include the one we already set, using actual current in PS
     #Allowed component is zero for solenoids and dipoles, but need to distinguish between them with ugly is_sole flag
 
@@ -46,22 +46,24 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
 
         #For a quad: Given a current we get back k1 * length * BRho
         #k1 * BRho is the element of fieldB, k1 is the element of fieldB_norm
-
+        #print "will interp with", currentsmatrix[i], fieldsmatrix[i]
+        #print "interp ", actual_current, np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i])
         calcfield = sign * poltimesorient * np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length 
-        calcfield_norm = calcfield / brho
-
         if set_current is not None:
             setfield = sign * poltimesorient * np.interp(set_current, currentsmatrix[i], fieldsmatrix[i]) / length 
         else:
             setfield = np.NAN
+
+        calcfield_norm = calcfield / brho
         setfield_norm  = setfield / brho
             
+        #There is a factor 1/n! (so factor 1/2 for sextupole for which n=2)
         #For a sext: Given a current we get back k2 * length/2 * BRho
         #k2 * BRho is the element of fieldB, k2 is the element of fieldB_norm
-        if i == 2:
-            calcfield      = calcfield*2.0
-            calcfield_norm = calcfield_norm*2.0
-            setfield_norm  = setfield_norm*2.0
+        factorial_factor = factorial(i)
+        calcfield      = calcfield*factorial_factor
+        calcfield_norm = calcfield_norm*factorial_factor
+        setfield_norm  = setfield_norm*factorial_factor
 
         #For a dip: Given a current we get back theta * BRho
         #NB theta (theta * BRho) is NOT the zeroth element of fieldB (fieldB normalised) but store it there anyway
@@ -115,31 +117,27 @@ def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, pol
         intBtimesBRho = fieldB[allowed_component]*length * poltimesorient * sign
     else:
         intBtimesBRho = fieldA[allowed_component]*length * poltimesorient * sign
-        
-    if allowed_component == 2:
-            intBtimesBRho  = intBtimesBRho/2.0
+
+
+    #n! factor
+    factorial_factor = factorial(allowed_component)
+    intBtimesBRho  = intBtimesBRho/factorial_factor
 
     #if a solenoid, no brho factor
     if is_sole:
         intBtimesBRho = intBtimesBRho / brho
 
     #Use numpy to interpolate. We only deal with the allowed component. Assume no need to extrapolate
+    #note usage is like: xp = [1,2,3], yp = [3,2,1], interp(2.5,xp,yp) = 1.5
+    #so here xp is the field and yp the current. xp must be increasing
+    #if fields starts with a positive sign, reverse both so that fields starts negative
 
-    #note usage is like
-    #xp = [1,2,3]
-    #yp = [3,2,1]
-    #interp(2.5,xp,yp) = 1.5
-    #so here xp is the field and yp the current - put in a field value to get the current
-    #xp must be increasing hence matrices are ordered
-
-    #so, if fields starts with a positive sign, reverse both so that fields starts negative
     if fieldsmatrix[allowed_component][0] > 0.0:
         fields_o   = fieldsmatrix[allowed_component][::-1]
         currents_o = currentsmatrix[allowed_component][::-1]
     else:
         fields_o   = fieldsmatrix[allowed_component]
         currents_o = currentsmatrix[allowed_component]
-
 
     calc_current = np.interp(intBtimesBRho, fields_o, currents_o)
 
