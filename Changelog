@@ -45,3 +45,8 @@
 	* More refactoring
 	* Needs test before deployment
 	* v1.1.4
+
+26-01-2015 Paul Bell
+	* Import MagnetCircuit to Magnet so only need to run one server
+	* Ready for R3 deployment
+	* v1.2.0
