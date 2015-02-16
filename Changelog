@@ -50,3 +50,8 @@
 	* Import MagnetCircuit to Magnet so only need to run one server
 	* Ready for R3 deployment
 	* v1.2.0
+
+16-02-2015 Paul Bell	
+	* tests from Johan
+	* merges to site fixes
+	* v1.2.1
