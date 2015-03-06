@@ -55,3 +55,8 @@
 	* tests from Johan
 	* merges to site fixes
 	* v1.2.1
+
+06-03-2015 Paul Bell	
+	* use per-magnet calibration in reading of field
+	* circuit still steers with averaged calibration curves
+	* v1.3.0

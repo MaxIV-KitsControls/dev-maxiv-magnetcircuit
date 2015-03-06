@@ -26,12 +26,17 @@ __docformat__ = 'restructuredtext'
 
 import PyTango
 import os
+import numpy as np
 import sys
+from math import sqrt
 from MagnetCircuit import MagnetCircuitClass, MagnetCircuit
+from magnetcircuitlib import calculate_fields #do not need calculate_current
+from processcalibrationlib import process_calibration_data
 
 class Magnet (PyTango.Device_4Impl):
 
     #--------- Add you global variables here --------------------------
+    _maxdim = 10 #Maximum number of multipole components
 
     def __init__(self,cl, name):
         self._state = None
@@ -44,17 +49,28 @@ class Magnet (PyTango.Device_4Impl):
 
     def init_device(self):
         self.debug_stream("In init_device()")        
-        self.set_state(PyTango.DevState.INIT)
+        self.set_state(PyTango.DevState.ON)
 
+        #attributes are read only field vectors
+        self.fieldA           = np.zeros(shape=(self._maxdim), dtype=float)
+        self.fieldANormalised = np.zeros(shape=(self._maxdim), dtype=float)
+        self.fieldB           = np.zeros(shape=(self._maxdim), dtype=float)
+        self.fieldBNormalised = np.zeros(shape=(self._maxdim), dtype=float)  
+
+        #this will get length, polarity, orientation and the raw calibration data
         self.get_device_properties(self.get_device_class())
+        self.PolTimesOrient = self.Orientation * self.Polarity
+        self.is_sole = False #hack for solenoids until configured properly
 
-        #Proxy to power supply device
+        #Proxy to circuit device, provides BRho and curren
         self.debug_stream("Circuit device proxy: %s " % self.CircuitProxies)
         self._circuit_device = None
+        self.BRho = 0.0
+        self.current = 0.0
 
         #Some status strings
         self.status_str_ilock = ""
-        self.status_str_field = ""
+        self.status_str_cfg = ""
 
         #interlock config
         self.interlock_descs   = {}
@@ -62,8 +78,13 @@ class Magnet (PyTango.Device_4Impl):
         self.bad_Ilock_config = False
         self.get_interlock_config()
 
-        self.set_state(PyTango.DevState.ON)
+        #configure magnet type, needed to calculate fields
+        self.configure_type()
 
+        #process the calibration data into useful numpy arrays 
+        (self.hasCalibData, self.status_str_cfg,  self.fieldsmatrix,  self.currentsmatrix) \
+            = process_calibration_data(self.ExcitationCurveCurrents,self.ExcitationCurveFields)
+   
     ###############################################################################
     #
     @property
@@ -100,6 +121,83 @@ class Magnet (PyTango.Device_4Impl):
 
     ###############################################################################
     #
+    def configure_type(self):
+            
+        if self.Type == "kquad":
+            self.allowed_component = 1
+        elif self.Type == "ksext":
+            self.allowed_component = 2
+        elif self.Type in ["hkick","vkick","csrcsbend","sben","rben", "sbend"]:
+            self.allowed_component = 0
+        elif self.Type == "sole":
+            self.allowed_component = 0
+            self.is_sole = True
+        else:
+            self.status_str_cfg = 'Magnet type invalid %s' % self.Type
+            self.debug_stream(self.status_str_cfg)
+            self.set_state( PyTango.DevState.FAULT )
+
+    ###############################################################################
+    #
+    def process_calibration_data(self):
+
+        #process calibration data into usable numpy matrices
+
+        #Check dimensions of current and field calibration data
+        #(Should be n arrays of field values for n arrays of current values)
+        if  len(self.ExcitationCurveCurrents) != len(self.ExcitationCurveFields):
+            self.set_state(PyTango.DevState.FAULT)
+            self.status_str_cfg = "Calibration data have mis-matched dimensions"
+            return
+
+        #Read calib data from property if exists. No information corresponds to [""]
+        if self.ExcitationCurveCurrents == [] or self.ExcitationCurveFields == []:
+            self.status_str_cfg = "No calibration data available."
+            return
+
+        #otherwise the magnet is calibrated
+        self.status_str_cfg = "Magnet is calibrated"
+        self.hasCalibData=True
+
+        #Make numpy arrays for field and currents for each multipole component. 
+        #At this point the calibration data are strings with comma separated values. Get the length by counting commas!
+        array_length = self.ExcitationCurveCurrents[0].count(",")+1
+                
+        #Calibration points are for positive currents only, but full calibration curve should go negative. 
+        #Make "reflected" arrays for negative currents and opposite sign on the fields, then merge the two later below
+        pos_fieldsmatrix   = np.zeros(shape=(self._maxdim,array_length), dtype=float)
+        pos_currentsmatrix = np.zeros(shape=(self._maxdim,array_length), dtype=float)
+        neg_fieldsmatrix   = np.zeros(shape=(self._maxdim,array_length-1), dtype=float)
+        neg_currentsmatrix = np.zeros(shape=(self._maxdim,array_length-1), dtype=float)
+               
+        self.fieldsmatrix   = np.zeros(shape=(self._maxdim,(2*array_length)-1), dtype=float)
+        self.currentsmatrix = np.zeros(shape=(self._maxdim,(2*array_length)-1), dtype=float)
+        self.fieldsmatrix[:]   = np.NAN
+        self.currentsmatrix[:] = np.NAN
+                
+        #Fill the numpy arrays, but first horrible conversion of list of chars to floats
+        self.debug_stream("Multipole dimension %d " % len(self.ExcitationCurveCurrents))
+
+        for i in range (0,len(self.ExcitationCurveCurrents)):
+            #PJB hack since I use a string to start with like "[1,2,3]" No way to store a matrix of floats?
+            if len(self.ExcitationCurveCurrents[i])>0:
+                #need to sort the currents and fields by absolute values for interpolation to work later
+                pos_fieldsmatrix[i]   =  sorted([float(x) for x in "".join(self.ExcitationCurveFields[i][1:-1]).split(",")],key=abs)
+                pos_currentsmatrix[i] =  sorted([float(x) for x in "".join(self.ExcitationCurveCurrents[i][1:-1]).split(",")],key=abs)
+                    
+            #Force field and current to be zero in first entry
+            pos_currentsmatrix[i][0] = 0.0
+            pos_fieldsmatrix[i][0] = 0.0
+                    
+            #Also here merge the positive and negative ranges into the final array
+            neg_fieldsmatrix[i]   = (-pos_fieldsmatrix[i][1:])[::-1]
+            neg_currentsmatrix[i] = (-pos_currentsmatrix[i][1:])[::-1]
+            #
+            self.currentsmatrix[i] = np.concatenate((neg_currentsmatrix[i],pos_currentsmatrix[i]),axis=0)
+            self.fieldsmatrix[i]   = np.concatenate((neg_fieldsmatrix[i],pos_fieldsmatrix[i]),axis=0)
+
+    ###############################################################################
+    #
     def check_interlock(self):
 
         self.isInterlocked = False
@@ -126,11 +224,14 @@ class Magnet (PyTango.Device_4Impl):
 
     ###############################################################################
     #
-    def get_circuit_state(self):
+    def get_circuit_state_and_current(self):
 
         if self.circuit_device:
             try:
                 cir_state = self.circuit_device.State()
+                self.current = self.circuit_device.currentActual
+                self.BRho = self.circuit_device.BRho
+
                 self.status_str_cir = "Connected to circuit %s in state %s " % (self.CircuitProxies, cir_state)
                 
             except PyTango.DevFailed as e:
@@ -151,103 +252,95 @@ class Magnet (PyTango.Device_4Impl):
         self.debug_stream("In always_excuted_hook()")
 
         #set state according to circuit state
-        self.set_state(self.get_circuit_state())
+        self.set_state(self.get_circuit_state_and_current())
 
         #get interlock state
         self.check_interlock()
 
         #set status message
-        msg = self.status_str_cir +"\n"+ self.status_str_ilock +"\n"+ self.status_str_field
+        msg = self.status_str_cfg +"\n"+ self.status_str_cir +"\n"+ self.status_str_ilock
         self.set_status(os.linesep.join([s for s in msg.splitlines() if s]))
+
+        #calc fields
+        if self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT, PyTango.DevState.UNKNOWN]:
+            (MainFieldComponent_r, MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
+                = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Length, self.current, None, self.is_sole)
 
 
     #-----------------------------------------------------------------------------
     #    Magnet read/write attribute methods
     #-----------------------------------------------------------------------------
-    
+    #Special function to set zeroth element of field vector to zero, as it should be for dipoles
+    #(We use the zeroth element to store theta, but should not be returned)
+    def convert_dipole_vector(self,vector):
+        returnvector = list(vector)
+        returnvector[0]=np.NAN
+        return returnvector
+
     def read_fieldA(self, attr):
         self.debug_stream("In read_fieldA()")
-        self.status_str_field = ""
-        try:
-            #fieldA_q  = self.CircuitDev.read_attribute("fieldA").quality
-            #if PyTango.AttrQuality.ATTR_INVALID == fieldA_q:
-            #    self.status_str_field =  "Field A not calculated by circuit device"
-            #else: 
-            self.fieldA = (self.circuit_device.fieldA)
-            #self.status_str_field =  "Fields calculated by circuit device"
-            attr.set_quality(PyTango.AttrQuality.ATTR_VALID)
+        #Dipoles and solenoids both have allowed component= 0
+        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
+        #For solenoids, we store Bs there
+        #BUT in reality zeroth element is zero. See wiki page for details.
+        if self.allowed_component == 0:
+            attr.set_value(self.convert_dipole_vector(self.fieldA))
+        else:
             attr.set_value(self.fieldA)
-        except PyTango.DevFailed as e:
-            self.debug_stream('Cannot read field A from circuit %s ' % self.CircuitProxies) 
-            self.status_str_field = "Cannot read field A from circuit"
-            attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
-
 
     def is_fieldA_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
-  
+        return self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+
+    #
+
     def read_fieldB(self, attr):
         self.debug_stream("In read_fieldB()")
-        self.status_str_field = ""
-        try:
-            #fieldB_q  = self.CircuitDev.read_attribute("fieldB").quality
-            #if PyTango.AttrQuality.ATTR_INVALID == fieldB_q:
-            #    self.status_str_field =  "Field B not calculated by circuit device"
-            #else:
-            self.fieldB = (self.circuit_device.fieldB)
-            #self.status_str_field =  "Fields calculated by circuit device"
-            attr.set_quality(PyTango.AttrQuality.ATTR_VALID)
+        #Dipoles and solenoids both have allowed component= 0
+        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
+        #For solenoids, we store Bs there
+        #BUT in reality zeroth element is zero. See wiki page for details.
+        if self.allowed_component == 0:
+            attr.set_value(self.convert_dipole_vector(self.fieldB))
+        else:
             attr.set_value(self.fieldB)
-        except PyTango.DevFailed as e:
-            self.debug_stream('Cannot read field B from circuit %s ' % self.CircuitProxies) 
-            self.status_str_field  = "Cannot read field B from circuit"
-            attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
-
-
 
     def is_fieldB_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        return self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+
+    #
 
     def read_fieldANormalised(self, attr):
         self.debug_stream("In read_fieldANormalised()")
-        self.status_str_field = ""
-        try:
-            #fieldAN_q  = self.CircuitDev.read_attribute("fieldANormalised").quality
-            #if PyTango.AttrQuality.ATTR_INVALID == fieldAN_q:
-            #    self.status_str_field =  "Field A not calculated by circuit device"
-            #else:
-            self.fieldANormalised = (self.circuit_device.fieldANormalised)
-            #self.status_str_field =  "Fields calculated by circuit device"
-            attr.set_quality(PyTango.AttrQuality.ATTR_VALID)
+        #Dipoles and solenoids both have allowed component= 0
+        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
+        #For solenoids, we store Bs there
+        #BUT in reality zeroth element is zero. See wiki page for details.
+        if self.allowed_component == 0:
+            attr.set_value(self.convert_dipole_vector(self.fieldANormalised))
+        else:
             attr.set_value(self.fieldANormalised)
-        except PyTango.DevFailed as e:
-            self.debug_stream('Cannot read field A from circuit %s ' % self.CircuitProxies) 
-            self.status_str_field  = "Cannot read field A from circuit"
-            attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
-
 
     def is_fieldANormalised_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        return self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+
+    #
 
     def read_fieldBNormalised(self, attr):
         self.debug_stream("In read_fieldBNormalised()")
-        self.status_str_field = ""
-        try:
-            #fieldBN_q  = self.CircuitDev.read_attribute("fieldBNormalised").quality
-            #3if PyTango.AttrQuality.ATTR_INVALID == fieldBN_q:
-            #    self.status_str_field =  "Field B not calculated by circuit device"
-            #else:
-            self.fieldBNormalised = (self.circuit_device.fieldBNormalised)
-            #self.status_str_field =  "Fields calculated by circuit device"
-            attr.set_quality(PyTango.AttrQuality.ATTR_VALID)
+        #Dipoles and solenoids both have allowed component= 0
+        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
+        #For solenoids, we store Bs there
+        #BUT in reality zeroth element is zero. See wiki page for details.
+        if self.allowed_component == 0:
+            attr.set_value(self.convert_dipole_vector(self.fieldBNormalised))
+        else:
             attr.set_value(self.fieldBNormalised)
-        except PyTango.DevFailed as e:
-            self.debug_stream('Cannot read field B from circuit %s ' % self.CircuitProxies) 
-            self.status_str_field  = "Cannot read field B from circuit"
-            attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
 
     def is_fieldBNormalised_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        return self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+
+    #
+
 
     def read_temperatureInterlock(self, attr):
         self.debug_stream("In read_temperatureInterlock()")
@@ -271,7 +364,7 @@ class MagnetClass(PyTango.DeviceClass):
         'CircuitProxies':
         [PyTango.DevString,
          "Associated circuit",
-         [ "not set" ] ],
+         [ "" ] ],
         'Length':
         [PyTango.DevFloat,
          "Length",
@@ -290,12 +383,22 @@ class MagnetClass(PyTango.DeviceClass):
          [ 0 ] ],
         'Type':
         [PyTango.DevString,
-         "Type",
-         [ "" ] ], 
+         "Tilt",
+         [ "" ] ],
         'TemperatureInterlock':
         [PyTango.DevVarStringArray,
          "TemperatureInterlock",
          [ "" ] ],
+        #PJB I use strings below since I can't have a 2d array of floats?
+        #So now I end up with a list of lists instead. See above for conversion.
+        'ExcitationCurveCurrents':
+        [PyTango.DevVarStringArray,
+         "Measured calibration currents for each multipole",
+         [ ] ],
+        'ExcitationCurveFields':
+        [PyTango.DevVarStringArray,
+         "Measured calibration fields for each multipole",
+         [ ] ],
     }
 
 
