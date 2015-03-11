@@ -53,20 +53,20 @@ class Magnet (PyTango.Device_4Impl):
         self.set_state(PyTango.DevState.ON)
 
         #attributes are read only field vectors
-        #self.fieldA_main           = np.zeros(shape=(self._maxdim), dtype=float)
-        #self.fieldANormalised_main = np.zeros(shape=(self._maxdim), dtype=float)
-        #self.fieldB_main           = np.zeros(shape=(self._maxdim), dtype=float)
-        #self.fieldBNormalised_main = np.zeros(shape=(self._maxdim), dtype=float)  
+        self.fieldA_main           = []
+        self.fieldANormalised_main = []
+        self.fieldB_main           = [] 
+        self.fieldBNormalised_main = [] 
         #
-        #self.fieldA_trm           = np.zeros(shape=(self._maxdim), dtype=float)
-        #self.fieldANormalised_trm = np.zeros(shape=(self._maxdim), dtype=float)
-        #self.fieldB_trm           = np.zeros(shape=(self._maxdim), dtype=float)
-        #self.fieldBNormalised_trm = np.zeros(shape=(self._maxdim), dtype=float)  
+        self.fieldA_trim           = [] 
+        self.fieldANormalised_trim = [] 
+        self.fieldB_trim           = [] 
+        self.fieldBNormalised_trim = [] 
         #
-        #self.fieldA_tot           = np.zeros(shape=(self._maxdim), dtype=float)
-        #self.fieldANormalised_tot = np.zeros(shape=(self._maxdim), dtype=float)
-        #self.fieldB_tot           = np.zeros(shape=(self._maxdim), dtype=float)
-        #self.fieldBNormalised_tot = np.zeros(shape=(self._maxdim), dtype=float)  
+        self.fieldA           = [] 
+        self.fieldANormalised = [] 
+        self.fieldB           = [] 
+        self.fieldBNormalised = [] 
         #
 
         #this will get length, polarity, orientation and the raw calibration data
@@ -86,6 +86,8 @@ class Magnet (PyTango.Device_4Impl):
         self.status_str_cfg = ""
         self.status_str_cir = ""
         self.status_str_trm = ""
+        #self.status_str_cir_i = ""
+        #self.status_str_trm_f = ""
 
         #interlock config
         self.interlock_descs   = {}
@@ -263,6 +265,8 @@ class Magnet (PyTango.Device_4Impl):
         else:
             #set state according to main circuit state
             self.set_state(self.get_main_circuit_state())
+            #get the current and calc the field
+            #self.get_main_current_and_field()            
 
         #Maybe also a trim coil
         if self.TrimCoil!=None:
@@ -290,41 +294,71 @@ class Magnet (PyTango.Device_4Impl):
 
     #
 
+    def get_main_current_and_field(self):
+
+        print "in get current and field"
+
+        if self.main_circuit_device:
+            try:
+                print "will read current"
+                Current = self.main_circuit_device.currentActual
+                print "will read brho"
+                BRho = self.main_circuit_device.BRho
+                #self.status_str_cir_i = "Read current from main coil " + self.TrimCoil
+            except PyTango.DevFailed as e:
+                #self.status_str_cir_i = "Cannot get state of current from circuit device " + self.MainCoil
+                self.debug_stream("Cannot get state or current from circuit device " + self.MainCoil)
+                return False            
+            else:
+                print "will calc field"
+                (MainFieldComponent_r, MainFieldComponent_w, self.fieldA_main, self.fieldANormalised_main, self.fieldB_main, self.fieldBNormalised_main) \
+                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length, Current, None, self.is_sole)
+                return True
+        else:
+            self.debug_stream("Cannot get proxy to main coil " + self.MainCoil)
+            #self.status_str_cir_i = "Cannot get proxy to main coil " + self.MainCoil
+            return False
+
+    #
+
+    def get_trim_field(self):
+
+        print "in get trim field"
+
+        if self.trim_circuit_device:
+            try:
+                self.fieldA_trim = self.trim_circuit_device.fieldA
+                #self.status_str_trm_f = "Read field from trim coil " + self.TrimCoil
+            except PyTango.DevFailed as e:
+                self.debug_stream("Cannot get field from trim circuit device " + self.TrimCoil)
+                #self.status_str_trm_f = "Cannot get field from trim circuit device " + self.TrimCoil
+                self.fieldA_trim = []
+        else:
+            #self.status_str_trm_f = "Cannot get proxy to trim coil " + self.TrimCoil
+            self.debug_stream("Cannot get proxy to trim coil " + self.TrimCoil)
+            self.fieldA_trim = []
+
+    #
+
+
     def read_fieldA(self, attr):
         self.debug_stream("In read_fieldA()")
 
-        #calc fields for main circuit
-        try:
-            Current = self.main_circuit_device.currentActual
-            BRho = self.main_circuit_device.BRho
-            print Current, BRho
-            (MainFieldComponent_r, MainFieldComponent_w, fieldA_main, fieldANormalised_main, fieldB_main, fieldBNormalised_main) \
-                = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length, Current, None, self.is_sole)
-            print "----------- main field a is ", fieldA_main
-        except PyTango.DevFailed:
-            self.debug_stream('Cannot read current from main circuit %s ' % self.MainCoil)
-            attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
-            return
+        #get current from main coil and calc field
+        #self.get_main_current_and_field()
 
         #look up field from trim
         if self.TrimCoil!=None:
-            try:
-                fieldA_trm = self.trim_circuit_device.fieldA
-                print "----------- trim field a is ", fieldA_trm
-                fieldA_tot = fieldA_main + fieldA_trm
-                print "----------- TOTAL field a is ", fieldA_tot
-                attr.set_quality(PyTango.AttrQuality.ATTR_VALID)
-                attr.set_value(fieldA_tot)
-            except PyTango.DevFailed as e:
-                self.debug_stream('Cannot read field from trim circuit %s ' % self.TrimCoil)
-                attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
-        else:
-            attr.set_quality(PyTango.AttrQuality.ATTR_VALID)
-            attr.set_value(fieldA_main)
+            self.get_trim_field()
 
-
+        #do the sum
+        attr.set_value(self.fieldA_trim+self.fieldA_main)
+     
     def is_fieldA_allowed(self, attr):
-        return self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        print "seeing if allowed"
+        allowed = self.get_main_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] 
+        print "in field a allowed", allowed
+        return allowed
 
     #
 
