@@ -29,6 +29,7 @@ import os
 import sys
 import numpy as np
 from math import sqrt
+import time
 from magnetcircuitlib import calculate_fields, calculate_current
 from processcalibrationlib import process_calibration_data
 
@@ -50,7 +51,7 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def init_device(self):
         self.debug_stream("In init_device()")
-        self.set_state(PyTango.DevState.INIT)
+        self.set_state(PyTango.DevState.ON)
 
         self.get_device_properties(self.get_device_class())
 
@@ -62,10 +63,10 @@ class TrimCircuit (PyTango.Device_4Impl):
         #depending on the magnet type, variable component can be k1, k2, etc
         self.MainFieldComponent_w = None
         self.MainFieldComponent_r = None
-        self.fieldA           = np.zeros(shape=(self._maxdim), dtype=float)
-        self.fieldANormalised = np.zeros(shape=(self._maxdim), dtype=float)
-        self.fieldB           = np.zeros(shape=(self._maxdim), dtype=float)
-        self.fieldBNormalised = np.zeros(shape=(self._maxdim), dtype=float)  
+        self.fieldA           = []
+        self.fieldANormalised = []
+        self.fieldB           = []
+        self.fieldBNormalised = []
 
         #sets whether field is scaled with energy
         self.scaleField=False
@@ -76,6 +77,7 @@ class TrimCircuit (PyTango.Device_4Impl):
         self.status_str_swb   = ""
         self.status_str_cal   = {}
         self.status_str_cfg   = ""
+        self.status_str_fin   = ""
         self.IntFieldQ = PyTango.AttrQuality.ATTR_VALID
 
         #Proxy to switch board device
@@ -126,6 +128,8 @@ class TrimCircuit (PyTango.Device_4Impl):
         #vertical correction - fills An
         (self.hasCalibData["ver_corr"], self.status_str_cal["ver_corr"],  self.fieldsmatrix["ver_corr"],  self.currentsmatrix["ver_corr"]) \
             = process_calibration_data(self.TrimExcitationCurveCurrents_Ver_Corr,self.TrimExcitationCurveFields_Ver_Corr)
+
+        self.get_swb_mode()
 
 
     ###############################################################################
@@ -183,13 +187,11 @@ class TrimCircuit (PyTango.Device_4Impl):
             self.set_state( PyTango.DevState.FAULT )
         else:
             self.debug_stream("Magnet length :  %f " % (self.Length))
-        
 
     ##############################################################################################################
     #
     def config_type(self):
 
-        print "in config type"
         att_vc = self.get_device_attr().get_attr_by_name("MainFieldComponent")
         multi_prop_vc = PyTango.MultiAttrProp()
         att_vc.get_properties(multi_prop_vc)
@@ -287,12 +289,11 @@ class TrimCircuit (PyTango.Device_4Impl):
     #
     def get_ps_state(self):
 
+        self.debug_stream("In get_ps_state()")
         if self.ps_device:
             try:
-
                 self.status_str_ps = "Reading state from %s  " % self.PowerSupplyProxy  
                 ps_state = self.ps_device.State()
-
             except:
                 self.status_str_ps = "Cannot read state of PS " + self.PowerSupplyProxy
                 self.debug_stream(self.status_str_ps)
@@ -308,95 +309,113 @@ class TrimCircuit (PyTango.Device_4Impl):
     #
     def get_current_and_field(self):
 
-        print "in trim get current and field"
+        self.debug_stream("In get_current_and_field()")
 
         if self.ps_device:
             try:
                 current_att = self.ps_device.read_attribute("Current")
                 self.actual_current = current_att.value
                 self.set_current = current_att.w_value
-                print "got current "
-                #self.actual_current =  self.ps_device.Current
                 #Just assume the set current is whatever is written on the ps device (could be written directly there!)
-                #self.set_current =  self.ps_device.read_attribute("Current").w_value
             except:
                 self.debug_stream("Cannot read current on PS " + self.PowerSupplyProxy)
-                print "no current"
                 return False
             else:
-                print "will calc fields"
                 #calculate the actual and set fields
-
                 (self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
                     = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.actual_current, self.set_current, False)
-                
-                print (self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)
                 return True
 
         else:
-            print "no trim proxy"
             self.debug_stream("Cannot get proxy to PS " + self.PowerSupplyProxy)
             return False
 
 
     ##############################################################################################################
     #
-    def get_swb_state(self):
+    def get_swb_mode(self):
 
-        print "in get_swb_state"
+        self.debug_stream("In get_swb_mode()")
+
         if self.swb_device:
             try:
-                self.status_str_swb = "Reading SWB mode from %s " % self.SwitchBoardProxy  
-                swb_state = self.swb_device.State()
                 self.Mode =  self.swb_device.Mode
-
-                print "SWB mode is ", self.Mode
-
+            except:
+                self.debug_stream("Cannot read mode on SWB " + self.SwitchBoardProxy)
+                return False
+            else:
                 #whatever the mode is determines the type of behaviour of the trim coil (quad, sext, etc)
                 #should maybe be event driven, not redetermine each time!
                 if self.oldMode == None or self.Mode != self.oldMode:
-                    print "mode changed"
+                    self.debug_stream("SWB mode changed")
                     self.oldMode=self.Mode
+                    if self.Mode not in ["octupole", "sextupole", "upright_q", "skew_q", "hor_corr", "ver_corr"]:
+                        self.Mode = None
+                        self.oldMode = None
+                        self.status_str_swb = 'Mode type invalid %s' % self.Mode
+                        self.set_state( PyTango.DevState.FAULT )
+                        return False
                     #set the allowed component, unit of k, etc
                     self.config_type() 
                     #set alarm levels on MainFieldComponent (etc) corresponding to the PS alarms
                     self.set_field_limits()
-
-            except:
-                self.status_str_swb = "Cannot read mode on SWB " + self.SwitchBoardProxy
-                self.debug_stream(self.status_str_swb)
-                swb_state = PyTango.DevState.FAULT
+                return True
 
         else:
-            self.status_str_swb = "Read mode:  cannot get proxy to " + self.SwitchBoardProxy
+            self.debug_stream("Read mode:  cannot get proxy to " + self.SwitchBoardProxy)
+            return False
+
+    ##############################################################################################################
+    #
+    def get_swb_state(self):
+
+        self.debug_stream("In get_swb_state()")
+
+        if self.swb_device:
+            try:
+                self.status_str_swb = "Reading SWB state from %s " % self.SwitchBoardProxy  
+                swb_state = self.swb_device.State()
+            except:
+                self.status_str_swb = "Cannot read state on SWB " + self.SwitchBoardProxy
+                self.debug_stream(self.status_str_swb)
+                swb_state = PyTango.DevState.FAULT
+                self.Mode = None
+        else:
+            self.status_str_swb = "Read SWB state:  cannot get proxy to " + self.SwitchBoardProxy
             swb_state = PyTango.DevState.FAULT
+            self.Mode = None
 
         return swb_state
 
 
     ##############################################################################################################
     #
-    def always_executed_hook(self):
-        self.debug_stream("In always_excuted_hook()")
+    def read_attr_hardware(self,data):
+        pass
 
-        #Always check state of the SWB (ie the mode)
+    def dev_state(self):
+
+        #First check SWB state
         swb_state = self.get_swb_state()
 
         if swb_state in ["PyTango.DevState.UNKNOWN","PyTango.DevState.ALARM""PyTango.DevState.FAULT"]:
-            self.set_status("SwitchBoard Device is in state " + str(swb_state))
-            self.set_state(swb_state)
-            return
+            self.status_str_swb = "SwitchBoard Device is in state " + str(swb_state)
+            return swb_state
 
-
-        print "mode is ", self.Mode
-
-        #get ps state
+        #Check PS state if SWB is OK
         ps_state = self.get_ps_state()
-        self.set_state(ps_state)
-        
-        #set status message
-        msg = "Mode: " + self.Mode +"\n"+ self.status_str_prop +"\n"+ self.status_str_cfg +"\n"+ self.status_str_cal[self.Mode] +"\n"+ self.status_str_ps +"\n"+ self.status_str_swb 
-        self.set_status(os.linesep.join([s for s in msg.splitlines() if s]))
+        return ps_state
+
+    def dev_status(self):
+
+        #set status messge
+        if self.Mode != None:
+            msg = "Mode: " + self.Mode +"\n"+ self.status_str_prop +"\n"+ self.status_str_cfg +"\n"+ self.status_str_cal[self.Mode] +"\n"+ self.status_str_ps +"\n"+ self.status_str_swb 
+        else:
+            msg = self.status_str_prop +"\n"+ self.status_str_cfg +"\n"+  self.status_str_ps +"\n"+ self.status_str_swb 
+        #self.set_status(os.linesep.join([s for s in self.status_str_fin.splitlines() if s]))
+        self.status_str_fin = os.linesep.join([s for s in msg.splitlines() if s])
+        return self.status_str_fin
 
 
     ##############################################################################################################
@@ -433,7 +452,8 @@ class TrimCircuit (PyTango.Device_4Impl):
         attr.set_value(self.Mode)
 
     def is_mode_allowed(self, attr):
-        return self.hasCalibData[self.Mode] and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        self.debug_stream("In is_mode_allowed()")
+        return self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
 
     #
 
@@ -442,7 +462,8 @@ class TrimCircuit (PyTango.Device_4Impl):
         attr.set_value(self.set_current)
 
     def is_currentCalculated_allowed(self, attr):
-        return self.get_current_and_field() and self.hasCalibData[self.Mode] and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        self.debug_stream("In is_currentCalculated_allowed()")
+        return self.get_current_and_field() and self.hasCalibData[self.Mode] and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]  
        
     #
 
@@ -451,7 +472,7 @@ class TrimCircuit (PyTango.Device_4Impl):
         attr.set_value(self.actual_current)
 
     def is_currentActual_allowed(self, attr):
-        print "seeing if current allowed in trim"
+        self.debug_stream("In is_currentActual_allowed()")
         return self.get_current_and_field() and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
 
     #
@@ -468,7 +489,8 @@ class TrimCircuit (PyTango.Device_4Impl):
             attr.set_value(self.fieldA)
 
     def is_fieldA_allowed(self, attr):
-        return self.get_current_and_field() and self.hasCalibData[self.Mode] and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        self.debug_stream("In read_fieldA_allowed()")
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]  and self.hasCalibData[self.Mode] and self.get_current_and_field() and self.get_swb_mode()
 
     #
 
@@ -484,7 +506,8 @@ class TrimCircuit (PyTango.Device_4Impl):
             attr.set_value(self.fieldB)
 
     def is_fieldB_allowed(self, attr):
-        return self.get_current_and_field() and self.hasCalibData[self.Mode] and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        self.debug_stream("In read_fieldB_allowed()")
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]  and self.hasCalibData[self.Mode] and self.get_current_and_field() and self.get_swb_mode()
 
     #
 
@@ -500,7 +523,8 @@ class TrimCircuit (PyTango.Device_4Impl):
             attr.set_value(self.fieldANormalised)
 
     def is_fieldANormalised_allowed(self, attr):
-        return self.get_current_and_field() and self.hasCalibData[self.Mode] and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        self.debug_stream("In read_fieldANormalised_allowed()")
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]  and self.hasCalibData[self.Mode] and self.get_current_and_field() and self.get_swb_mode()
 
     #
 
@@ -516,7 +540,8 @@ class TrimCircuit (PyTango.Device_4Impl):
             attr.set_value(self.fieldBNormalised)
 
     def is_fieldBNormalised_allowed(self, attr):
-        return self.get_current_and_field() and self.hasCalibData[self.Mode] and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        self.debug_stream("In read_fieldBNormalised_allowed()")
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]  and self.hasCalibData[self.Mode] and self.get_current_and_field() and self.get_swb_mode()
 
     #
 
@@ -561,7 +586,6 @@ class TrimCircuit (PyTango.Device_4Impl):
             if self.hasCalibData[self.Mode]:
                 (self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
                     = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.actual_current, self.set_current, False)
-                print self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised
 
 
     def is_energy_allowed(self, attr):

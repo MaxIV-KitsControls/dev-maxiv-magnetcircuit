@@ -63,4 +63,4 @@ def process_calibration_data(ExcitationCurveCurrents, ExcitationCurveFields):
         currentsmatrix[i] = np.concatenate((neg_currentsmatrix[i],pos_currentsmatrix[i]),axis=0)
         fieldsmatrix[i]   = np.concatenate((neg_fieldsmatrix[i],pos_fieldsmatrix[i]),axis=0)
 
-    return  hasCalibData, " Calibration available", fieldsmatrix, currentsmatrix
+    return  hasCalibData, "Calibration available", fieldsmatrix, currentsmatrix

@@ -16,7 +16,7 @@ from math import sqrt, factorial
 
 _maxdim = 10 #Maximum number of multipole components
 
-def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  poltimesorient, tilt, maglen, actual_current, set_current=None, is_sole=False):
+def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  poltimesorient, tilt, typ, maglen, actual_current, set_current=None, is_sole=False):
 
     #print " +++++++++++ in CF +++++++++++++++ ", actual_current, set_current, is_sole
     #Calculate all field components which will include the one we already set, using actual current in PS
@@ -71,7 +71,7 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
 
         #For a sole, get back B_s directly, no scaling by brho
 
-        if tilt == 0:
+        if tilt == 0 and typ not in ["vkick","skew_q","ver_corr"]:
             fieldB[i] = calcfield
             fieldBNormalised[i] = calcfield_norm
             if i==allowed_component:
@@ -95,7 +95,7 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
 
     return thiscomponent, thissetcomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
 
-def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, poltimesorient, tilt, length, fieldA, fieldB, is_sole=False):
+def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, poltimesorient, tilt, typ, length, fieldA, fieldB, is_sole=False):
     
 
     #print " +++++++++++ in CF +++++++++++++++ ", fieldB, is_sole
@@ -113,7 +113,7 @@ def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, pol
         sign =  1
         length = 1.0
 
-    if tilt == 0:
+    if tilt == 0 and typ not in ["vkick","skew_q","ver_corr"]:
         intBtimesBRho = fieldB[allowed_component]*length * poltimesorient * sign
     else:
         intBtimesBRho = fieldA[allowed_component]*length * poltimesorient * sign
