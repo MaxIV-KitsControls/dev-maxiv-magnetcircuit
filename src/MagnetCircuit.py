@@ -332,7 +332,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
         if self.ps_device:
             self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
-            self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 1.0, 1)
+            self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 4)
         else:
             self.status_str_cyc = "Setup cycling: cannot get proxy to %s " % self.PowerSupplyProxy 
             self.set_state(PyTango.DevState.FAULT)
@@ -554,25 +554,24 @@ class MagnetCircuit (PyTango.Device_4Impl):
         if self.hasCalibData:
             self.set_field_limits()
 
+
         #If energy changes, current or field must also change
-        #Only do something if the current from the PS is known
-        if self.scaleField:
-            self.debug_stream("Energy (Brho) changed to %f (%f): will recalculate current to preserve field" % (self.energy_r, self.BRho) )
-            #since brho changed, need to recalc the field
-            if self.Tilt == 0 and self.Type != "vkick":
-                self.fieldB[self.allowed_component]  = self.MainFieldComponent_r * self.BRho
-            else:
-                self.fieldA[self.allowed_component]  = self.MainFieldComponent_r * self.BRho
-            #now find the current if possible
-            if self.hasCalibData:
+        #Can only do something if calibrated
+        if self.hasCalibData:
+            if self.scaleField:
+                self.debug_stream("Energy (Brho) changed to %f (%f): will recalculate current to preserve field" % (self.energy_r, self.BRho) )
+                #since brho changed, need to recalc the field
+                if self.Tilt == 0 and self.Type != "vkick":
+                    self.fieldB[self.allowed_component]  = self.MainFieldComponent_r * self.BRho
+                else:
+                    self.fieldA[self.allowed_component]  = self.MainFieldComponent_r * self.BRho
                 self.set_current \
                     = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.fieldA, self.fieldB, self.is_sole)
                 ###########################################################
                 #Set the current on the ps
                 self.set_ps_current()
-        else:
-            self.debug_stream("Energy changed: will recalculate fields for the PS current")
-            if self.hasCalibData:
+            else:
+                self.debug_stream("Energy changed: will recalculate fields for the PS current")
                 (self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
                     = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.actual_current, self.set_current, self.is_sole)
 

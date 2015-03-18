@@ -80,8 +80,7 @@ class Magnet (PyTango.Device_4Impl):
         self.status_str_cfg = ""
         self.status_str_cir = ""
         self.status_str_trm = ""
-        #self.status_str_cir_i = ""
-        #self.status_str_trm_f = ""
+        self.status_str_trmi = ""
 
         #interlock config
         self.interlock_descs   = {}
@@ -102,7 +101,7 @@ class Magnet (PyTango.Device_4Impl):
     def get_coil_proxies(self):
 
         #CircuitProxies property can contain main and trim coil
-        if len(self.CircuitProxies) == 1: # and "TRIM" not in self.CircuitProxies[0]:
+        if len(self.CircuitProxies) == 1 and "TRIM" not in self.CircuitProxies[0]:
             self.MainCoil=self.CircuitProxies[0]
         elif len(self.CircuitProxies) == 2:
             if "TRIM" in self.CircuitProxies[0]:
@@ -292,7 +291,7 @@ class Magnet (PyTango.Device_4Impl):
         self.check_interlock()
 
         #set status message
-        msg = self.status_str_cfg +"\n"+ self.status_str_cir +"\n"+ self.status_str_trm +"\n" + self.status_str_ilk
+        msg = self.status_str_cfg +"\n"+ self.status_str_cir +"\n"+ self.status_str_trm +"\n" + self.status_str_ilk + "\n"+ self.status_str_trmi
         self.set_status(os.linesep.join([s for s in msg.splitlines() if s]))
 
 
@@ -316,8 +315,11 @@ class Magnet (PyTango.Device_4Impl):
             if self.trim_circuit_device:
                 try:
                     self.fieldA_trim  = self.trim_circuit_device.fieldA
+                    self.status_str_trmi = ""
                 except PyTango.DevFailed as e:
-                    self.debug_stream("Cannot get field from trim circuit device " + self.TrimCoil)
+                    msg = "Cannot add field from trim circuit device " + self.TrimCoil
+                    self.debug_stream(msg)
+                    self.status_str_trmi = msg
                     self.fieldA_trim = [] 
             else:
                 self.debug_stream("Cannot get proxy to trim coil " + self.TrimCoil)
@@ -339,8 +341,11 @@ class Magnet (PyTango.Device_4Impl):
             if self.trim_circuit_device:
                 try:
                     self.fieldANormalised_trim  = self.trim_circuit_device.fieldANormalised
+                    self.status_str_trmi = ""
                 except PyTango.DevFailed as e:
-                    self.debug_stream("Cannot get field from trim circuit device " + self.TrimCoil)
+                    msg = "Cannot add field from trim circuit device " + self.TrimCoil
+                    self.debug_stream(msg)
+                    self.status_str_trmi = msg
                     self.fieldANormalised_trim = [] 
             else:
                 self.debug_stream("Cannot get proxy to trim coil " + self.TrimCoil)
@@ -362,8 +367,11 @@ class Magnet (PyTango.Device_4Impl):
             if self.trim_circuit_device:
                 try:
                     self.fieldB_trim  = self.trim_circuit_device.fieldB
+                    self.status_str_trmi = ""
                 except PyTango.DevFailed as e:
-                    self.debug_stream("Cannot get field from trim circuit device " + self.TrimCoil)
+                    msg = "Cannot add field from trim circuit device " + self.TrimCoil
+                    self.debug_stream(msg)
+                    self.status_str_trmi = msg
                     self.fieldB_trim = [] 
             else:
                 self.debug_stream("Cannot get proxy to trim coil " + self.TrimCoil)
@@ -385,8 +393,11 @@ class Magnet (PyTango.Device_4Impl):
             if self.trim_circuit_device:
                 try:
                     self.fieldBNormalised_trim  = self.trim_circuit_device.fieldBNormalised
+                    self.status_str_trmi = ""
                 except PyTango.DevFailed as e:
-                    self.debug_stream("Cannot get field from trim circuit device " + self.TrimCoil)
+                    msg = "Cannot add field from trim circuit device " + self.TrimCoil
+                    self.debug_stream(msg)
+                    self.status_str_trmi = msg
                     self.fieldBNormalised_trim = [] 
             else:
                 self.debug_stream("Cannot get proxy to trim coil " + self.TrimCoil)

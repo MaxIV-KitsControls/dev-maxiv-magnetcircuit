@@ -19,6 +19,9 @@ def process_calibration_data(ExcitationCurveCurrents, ExcitationCurveFields):
     if  len(ExcitationCurveCurrents) != len(ExcitationCurveFields):
         return hasCalibData, "Calibration data have mis-matched dimensions", None, None
 
+    if ExcitationCurveCurrents==[] or ExcitationCurveFields==[]:
+        return hasCalibData, "Calibration data is missing.", None, None
+
     #Make numpy arrays for field and currents for each multipole component. 
     #At this point the calibration data are strings with comma separated values. Get the length by counting commas!
     array_length_1 = ExcitationCurveCurrents[0].count(",")
