@@ -297,7 +297,7 @@ class TrimCircuit (PyTango.Device_4Impl):
             except:
                 self.status_str_ps = "Cannot read state of PS " + self.PowerSupplyProxy
                 self.debug_stream(self.status_str_ps)
-                ps_state = PyTango.DevState.FAULT
+                return PyTango.DevState.FAULT
 
         else:
             self.status_str_ps = "Read PS state:  cannot get proxy to " + self.PowerSupplyProxy 
@@ -379,8 +379,8 @@ class TrimCircuit (PyTango.Device_4Impl):
             except:
                 self.status_str_swb = "Cannot read state on SWB " + self.SwitchBoardProxy
                 self.debug_stream(self.status_str_swb)
-                swb_state = PyTango.DevState.FAULT
                 self.Mode = None
+                return PyTango.DevState.FAULT
         else:
             self.status_str_swb = "Read SWB state:  cannot get proxy to " + self.SwitchBoardProxy
             swb_state = PyTango.DevState.FAULT

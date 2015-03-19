@@ -356,7 +356,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 self.status_str_ps = "Cannot read state of PS " + self.PowerSupplyProxy
                 self.debug_stream(self.status_str_ps)
                 self._cycler = None
-                ps_state = PyTango.DevState.FAULT
+                return PyTango.DevState.FAULT
 
         else:
             self.status_str_ps = "Read PS state:  cannot get proxy to " + self.PowerSupplyProxy 

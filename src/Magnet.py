@@ -219,10 +219,10 @@ class Magnet (PyTango.Device_4Impl):
             try:
                 cir_state = self.main_circuit_device.State()
                 self.status_str_cir = "Connected to main circuit %s in state %s " % (self.MainCoil, cir_state)
-            except PyTango.DevFailed as e:
+            except (AttributeError, PyTango.DevFailed) as e:
                 self.status_str_cir = "Cannot get state of main circuit device " + self.MainCoil
                 self.debug_stream(self.status_str_cir)
-                cir_state =PyTango.DevState.FAULT
+                return PyTango.DevState.FAULT
         else:
             self.status_str_cir = "Cannot get proxy to main coil " + self.MainCoil
             cir_state = PyTango.DevState.FAULT
