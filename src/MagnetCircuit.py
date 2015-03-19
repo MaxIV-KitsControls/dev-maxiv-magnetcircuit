@@ -229,6 +229,12 @@ class MagnetCircuit (PyTango.Device_4Impl):
             multi_prop_vc.label  = "k2"
             multi_prop_ivc.unit  = "m ^-2"
             multi_prop_ivc.label = "length integrated k2"
+        elif self.Type == "koct":
+            self.allowed_component = 3
+            multi_prop_vc.unit   = "m ^-4"
+            multi_prop_vc.label  = "k3"
+            multi_prop_ivc.unit  = "m ^-4"
+            multi_prop_ivc.label = "length integrated k3"
         #h and vkick useg small theta - not yet implemented, incorrect
         elif self.Type in ["hkick","vkick"]:
             self.allowed_component = 0

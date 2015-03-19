@@ -101,13 +101,13 @@ class Magnet (PyTango.Device_4Impl):
     def get_coil_proxies(self):
 
         #CircuitProxies property can contain main and trim coil
-        if len(self.CircuitProxies) == 1 and "TRIM" not in self.CircuitProxies[0]:
+        if len(self.CircuitProxies) == 1 and "CRT" not in self.CircuitProxies[0]:
             self.MainCoil=self.CircuitProxies[0]
         elif len(self.CircuitProxies) == 2:
-            if "TRIM" in self.CircuitProxies[0]:
+            if "CRT" in self.CircuitProxies[0]:
                 self.TrimCoil = self.CircuitProxies[0]
                 self.MainCoil = self.CircuitProxies[1]
-            elif "TRIM" in self.CircuitProxies[1]:
+            elif "CRT" in self.CircuitProxies[1]:
                 self.TrimCoil = self.CircuitProxies[1]
                 self.MainCoil = self.CircuitProxies[0]
         else:
@@ -172,6 +172,8 @@ class Magnet (PyTango.Device_4Impl):
             self.allowed_component = 1
         elif self.Type == "ksext":
             self.allowed_component = 2
+        elif self.Type == "koct":
+            self.allowed_component = 3
         elif self.Type in ["hkick","vkick","csrcsbend","sben","rben", "sbend"]:
             self.allowed_component = 0
         elif self.Type == "sole":

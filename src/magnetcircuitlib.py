@@ -34,15 +34,11 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
         #NB: i=0 for dipoles, 1 for quad, 2 for sext
         #There is an extra sign, 1 for dipoles, -1 for quads and sext
         #for dipoles and solenoids do not integrate by length
+        sign = -1
+        length = maglen
         if i == 0:
             sign =  1
             length = 1.0
-        if i == 1:
-            sign =  -1
-            length = maglen
-        if i == 2:
-            sign =  -1
-            length = maglen
 
         #For a quad: Given a current we get back k1 * length * BRho
         #k1 * BRho is the element of fieldB, k1 is the element of fieldB_norm
