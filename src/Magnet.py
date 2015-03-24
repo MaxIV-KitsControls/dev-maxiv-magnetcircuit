@@ -95,6 +95,8 @@ class Magnet (PyTango.Device_4Impl):
         (self.hasCalibData, self.status_str_cfg,  self.fieldsmatrix,  self.currentsmatrix) \
             = process_calibration_data(self.ExcitationCurveCurrents,self.ExcitationCurveFields)
 
+        #option to disable use of trim coils
+        self.applyTrim = False
 
     ###############################################################################
     #
@@ -240,7 +242,7 @@ class Magnet (PyTango.Device_4Impl):
                 Current = self.main_circuit_device.currentActual
                 self.debug_stream("Will read BRho from main circuit")
                 BRho = self.main_circuit_device.BRho
-            except PyTango.DevFailed as e:
+            except (AttributeError, PyTango.DevFailed) as e:
                 self.debug_stream("Cannot get state or current from circuit device " + self.MainCoil)
                 return False            
             else:
@@ -261,10 +263,10 @@ class Magnet (PyTango.Device_4Impl):
             try:
                 cir_state = self.trim_circuit_device.State()
                 self.status_str_trm = "Connected to trim circuit %s in state %s " % (self.TrimCoil, cir_state)
-            except PyTango.DevFailed as e:
+            except (AttributeError, PyTango.DevFailed) as e:
                 self.status_str_trm = "Cannot get state of trim circuit device " + self.TrimCoil
                 self.debug_stream(self.status_str_trm)
-                cir_state =PyTango.DevState.FAULT
+                return PyTango.DevState.FAULT
         else:
             self.status_str_trm = "Cannot get proxy to trim coil " + self.TrimCoil
             cir_state = PyTango.DevState.FAULT
@@ -285,9 +287,12 @@ class Magnet (PyTango.Device_4Impl):
             self.set_state(self.get_main_circuit_state())
             #
             #maybe also a trim coil
-            if self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]:
-                if self.TrimCoil!=None:
-                    self.set_state(self.get_trim_circuit_state())
+            if self.applyTrim:
+                if self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]:
+                    if self.TrimCoil!=None:
+                        self.set_state(self.get_trim_circuit_state())
+            else:
+                self.status_str_trm = "Trim field not applied"
 
         #get interlock state
         self.check_interlock()
@@ -313,7 +318,7 @@ class Magnet (PyTango.Device_4Impl):
     def read_fieldA(self, attr):
         self.debug_stream("In read_fieldA()")
         #look up field from trim
-        if self.TrimCoil!=None:
+        if self.applyTrim and self.TrimCoil!=None:
             if self.trim_circuit_device:
                 try:
                     self.fieldA_trim  = self.trim_circuit_device.fieldA
@@ -339,7 +344,7 @@ class Magnet (PyTango.Device_4Impl):
     def read_fieldANormalised(self, attr):
         self.debug_stream("In read_fieldANormalised()")
         #look up field from trim
-        if self.TrimCoil!=None:
+        if self.applyTrim and self.TrimCoil!=None:
             if self.trim_circuit_device:
                 try:
                     self.fieldANormalised_trim  = self.trim_circuit_device.fieldANormalised
@@ -365,7 +370,7 @@ class Magnet (PyTango.Device_4Impl):
     def read_fieldB(self, attr):
         self.debug_stream("In read_fieldB()")
         #look up field from trim
-        if self.TrimCoil!=None:
+        if self.applyTrim and self.TrimCoil!=None:
             if self.trim_circuit_device:
                 try:
                     self.fieldB_trim  = self.trim_circuit_device.fieldB
@@ -391,7 +396,7 @@ class Magnet (PyTango.Device_4Impl):
     def read_fieldBNormalised(self, attr):
         self.debug_stream("In read_fieldBNormalised()")
         #look up field from trim
-        if self.TrimCoil!=None:
+        if self.applyTrim and self.TrimCoil!=None:
             if self.trim_circuit_device:
                 try:
                     self.fieldBNormalised_trim  = self.trim_circuit_device.fieldBNormalised
@@ -417,6 +422,17 @@ class Magnet (PyTango.Device_4Impl):
     def read_temperatureInterlock(self, attr):
         self.debug_stream("In read_temperatureInterlock()")
         attr.set_value(self.isInterlocked)
+
+    #
+
+    def read_applyTrim(self, attr):
+        self.debug_stream("In read_applyTrim()")
+        attr.set_value(self.applyTrim)
+        attr.set_write_value(self.applyTrim)
+
+    def write_applyTrim(self, attr):
+        self.debug_stream("In write_applyTrim()")
+        self.applyTrim = attr.get_write_value()
 
     #-----------------------------------------------------------------------------
     #    Magnet command methods
@@ -481,6 +497,14 @@ class MagnetClass(PyTango.DeviceClass):
 
     #Attribute definitions
     attr_list = {
+        'applyTrim':
+        [[PyTango.DevBoolean,
+          PyTango.SCALAR,
+          PyTango.READ_WRITE],
+         {
+             'label': "apply trim field",
+             'unit': "T/F",
+         } ],
         'fieldA':
         [[PyTango.DevFloat,
           PyTango.SPECTRUM,

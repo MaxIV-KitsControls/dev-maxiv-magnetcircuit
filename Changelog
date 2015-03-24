@@ -76,3 +76,7 @@
 25-03-2015 Paul Bell	
 	* fix packaging
 	* v1.3.5
+
+26-03-2015 Paul Bell	
+	* Option to not apply trim field in magnet
+	* v1.3.6
