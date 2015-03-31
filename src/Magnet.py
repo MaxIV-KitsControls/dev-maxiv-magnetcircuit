@@ -89,11 +89,12 @@ class Magnet (PyTango.Device_4Impl):
         self.get_interlock_config()
 
         #configure magnet type, needed to calculate fields
+        self.allowed_component = 0
         self.configure_type()
 
         #process the calibration data into useful numpy arrays 
         (self.hasCalibData, self.status_str_cfg,  self.fieldsmatrix,  self.currentsmatrix) \
-            = process_calibration_data(self.ExcitationCurveCurrents,self.ExcitationCurveFields)
+            = process_calibration_data(self.ExcitationCurveCurrents,self.ExcitationCurveFields, self.allowed_component)
 
         #option to disable use of trim coils
         self.applyTrim = False

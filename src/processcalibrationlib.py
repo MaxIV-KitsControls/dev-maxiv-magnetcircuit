@@ -10,7 +10,7 @@ import numpy as np
 
 _maxdim = 10 #Maximum number of multipole components
 
-def process_calibration_data(ExcitationCurveCurrents, ExcitationCurveFields):
+def process_calibration_data(ExcitationCurveCurrents, ExcitationCurveFields, allowedcomp):
 
     hasCalibData=False
 
@@ -32,6 +32,14 @@ def process_calibration_data(ExcitationCurveCurrents, ExcitationCurveFields):
         return hasCalibData, "Calibration data have mis-matched dimensions", None, None
     array_length = array_length_1 + 1
 
+    #number of multipoles must also be the same for currents and fields
+    if len(ExcitationCurveCurrents) != len(ExcitationCurveFields):
+        return hasCalibData, "Calibration data have mis-matched dimensions", None, None
+
+    #check dimensions against allowed comp, e.g if sext must be dim 3
+    if allowedcomp!=len(ExcitationCurveCurrents)-1:
+        return hasCalibData, "Calibration data incompatible with magnet type.", None, None
+
     #Assume now the circuit/magnet is calibrated
     hasCalibData=True
 
@@ -44,7 +52,7 @@ def process_calibration_data(ExcitationCurveCurrents, ExcitationCurveFields):
     
     fieldsmatrix   = np.zeros(shape=(_maxdim,(2*array_length)-1), dtype=float)
     currentsmatrix = np.zeros(shape=(_maxdim,(2*array_length)-1), dtype=float)
-    fieldsmatrix[:] = np.NAN
+    fieldsmatrix[:]   = np.NAN
     currentsmatrix[:] = np.NAN
     
     #Fill the numpy arrays, but first horrible conversion of list of chars to floats
@@ -56,8 +64,8 @@ def process_calibration_data(ExcitationCurveCurrents, ExcitationCurveFields):
             pos_currentsmatrix[i] =  sorted([float(x) for x in "".join(ExcitationCurveCurrents[i][1:-1]).split(",")],key=abs)
                     
         #Force field and current to be zero in first entry
-        pos_currentsmatrix[i][0] = 0.0
-        pos_fieldsmatrix[i][0] = 0.0
+        #pos_currentsmatrix[i][0] = 0.0
+        #pos_fieldsmatrix[i][0] = 0.0
 
         #Also here merge the positive and negative ranges into the final array
         neg_fieldsmatrix[i]   = (-pos_fieldsmatrix[i][1:])[::-1]
@@ -65,5 +73,6 @@ def process_calibration_data(ExcitationCurveCurrents, ExcitationCurveFields):
         #
         currentsmatrix[i] = np.concatenate((neg_currentsmatrix[i],pos_currentsmatrix[i]),axis=0)
         fieldsmatrix[i]   = np.concatenate((neg_fieldsmatrix[i],pos_fieldsmatrix[i]),axis=0)
+
 
     return  hasCalibData, "Calibration available", fieldsmatrix, currentsmatrix

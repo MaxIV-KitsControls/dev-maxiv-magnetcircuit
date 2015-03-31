@@ -39,6 +39,16 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     _maxdim = 10 #Maximum number of multipole components
 
+    #allowed trim coil modes
+    MODE_NAMES = ["SEXTUPOLE",
+                  "NORMAL_QUADRUPOLE",
+                  "SKEW_QUADRUPOLE",
+                  "X_CORRECTOR",
+                  "Y_CORRECTOR"]
+
+    #allowed types of trim coils (only SX type has sextupole mode!)
+    #MODE_TYPES = ["OXX", "OXY", "OYY", "SXDE"]
+
     def __init__(self,cl, name):
         PyTango.Device_4Impl.__init__(self,cl,name)
         self.debug_stream("In __init__()")
@@ -56,17 +66,17 @@ class TrimCircuit (PyTango.Device_4Impl):
         self.get_device_properties(self.get_device_class())
 
         #energy attribute eventually to be set by higher level device?
-        self.energy_r = 100000000.0 #=100 MeV for testing, needs to be read from somewhere
+        self.energy_r = 300000000.0 #=100 MeV for testing, needs to be read from somewhere
         self.energy_w = None
         self.calculate_brho() #a conversion factor that depends on energy
 
         #depending on the magnet type, variable component can be k1, k2, etc
         self.MainFieldComponent_w = None
         self.MainFieldComponent_r = None
-        self.fieldA           = []
-        self.fieldANormalised = []
-        self.fieldB           = []
-        self.fieldBNormalised = []
+        self.fieldA           = np.zeros(shape=(self._maxdim), dtype=float)
+        self.fieldANormalised = np.zeros(shape=(self._maxdim), dtype=float)
+        self.fieldB           = np.zeros(shape=(self._maxdim), dtype=float)
+        self.fieldBNormalised = np.zeros(shape=(self._maxdim), dtype=float)  
 
         #sets whether field is scaled with energy
         self.scaleField=False
@@ -82,7 +92,7 @@ class TrimCircuit (PyTango.Device_4Impl):
 
         #Proxy to switch board device
         self._swb_device = None
-        self.Mode = None #this can be: octupole, sextupole, upright_q, skew_q, hor_corr, ver_corr
+        self.Mode = None #one of the allowed modes
         self.oldMode = None #keep track of mode changes
 
         #Proxy to power supply device
@@ -99,38 +109,48 @@ class TrimCircuit (PyTango.Device_4Impl):
         self.Length = 0 #read from magnet below...
         self.get_magnet_length() #...this is reading from the magnet, not the circuit!
         #
-        #The switchboard mode determines the allowed field component to be controlled.
-        #Note that in the multipole expansion we have:
-        # 1 - dipole, 2 - quadrupole, 3 - sextupole, 4 - octupole
-        #which of course is row 0-3 in our numpy array
-        self.allowed_component = 0
 
         #process the calibration data into useful numpy arrays
         self.fieldsmatrix = {} #calibration data accessed via mode
         self.currentsmatrix = {}
-        self.hasCalibData = {}
+        self.hasCalibData = {} #a flag per mode
 
-        #octupole
-        (self.hasCalibData["octupole"], self.status_str_cal["octupole"],  self.fieldsmatrix["octupole"],  self.currentsmatrix["octupole"]) \
-            = process_calibration_data(self.TrimExcitationCurveCurrents_Octupole,self.TrimExcitationCurveFields_Octupole)
-        #sextupole
-        (self.hasCalibData["sextupole"], self.status_str_cal["sextupole"],  self.fieldsmatrix["sextupole"],  self.currentsmatrix["sextupole"]) \
-            = process_calibration_data(self.TrimExcitationCurveCurrents_Sextupole,self.TrimExcitationCurveFields_Sextupole)
+        #need to know which type of trim circuit this is (SXDE, OXY, etc)
+        #The device names contains the type, e.g R3-301M1/MAG/CRTOXX-01
+        trim_type = self.get_name().split("/")[-1].split("-")[0][-3:]
+
         #normal quadrupole
-        (self.hasCalibData["upright_q"], self.status_str_cal["upright_q"],  self.fieldsmatrix["upright_q"],  self.currentsmatrix["upright_q"]) \
-            = process_calibration_data(self.TrimExcitationCurveCurrents_Upright_Q,self.TrimExcitationCurveFields_Upright_Q)
+        typearg="NORMAL_QUADRUPOLE"
+        (self.hasCalibData[typearg], self.status_str_cal[typearg],  self.fieldsmatrix[typearg],  self.currentsmatrix[typearg]) \
+            = process_calibration_data(self.TrimExcitationCurveCurrents_normal_quadrupole,self.TrimExcitationCurveFields_normal_quadrupole, 1)
+
         #skew quadrupole - fills An
-        (self.hasCalibData["skew_q"], self.status_str_cal["skew_q"],  self.fieldsmatrix["skew_q"],  self.currentsmatrix["skew_q"]) \
-            = process_calibration_data(self.TrimExcitationCurveCurrents_Skew_Q,self.TrimExcitationCurveFields_Skew_Q)
+        typearg="SKEW_QUADRUPOLE"
+        (self.hasCalibData[typearg], self.status_str_cal[typearg],  self.fieldsmatrix[typearg],  self.currentsmatrix[typearg]) \
+            = process_calibration_data(self.TrimExcitationCurveCurrents_skew_quadrupole,self.TrimExcitationCurveFields_skew_quadrupole, 1)
+
+
         #horizontal correction
-        (self.hasCalibData["hor_corr"], self.status_str_cal["hor_corr"],  self.fieldsmatrix["hor_corr"],  self.currentsmatrix["hor_corr"]) \
-            = process_calibration_data(self.TrimExcitationCurveCurrents_Hor_Corr,self.TrimExcitationCurveFields_Hor_Corr)
+        typearg="X_CORRECTOR"
+        (self.hasCalibData[typearg], self.status_str_cal[typearg],  self.fieldsmatrix[typearg],  self.currentsmatrix[typearg]) \
+            = process_calibration_data(self.TrimExcitationCurveCurrents_x_corrector,self.TrimExcitationCurveFields_x_corrector, 0)
+
         #vertical correction - fills An
-        (self.hasCalibData["ver_corr"], self.status_str_cal["ver_corr"],  self.fieldsmatrix["ver_corr"],  self.currentsmatrix["ver_corr"]) \
-            = process_calibration_data(self.TrimExcitationCurveCurrents_Ver_Corr,self.TrimExcitationCurveFields_Ver_Corr)
+        typearg="Y_CORRECTOR"
+        (self.hasCalibData[typearg], self.status_str_cal[typearg],  self.fieldsmatrix[typearg],  self.currentsmatrix[typearg]) \
+            = process_calibration_data(self.TrimExcitationCurveCurrents_y_corrector,self.TrimExcitationCurveFields_y_corrector, 0)
 
+        #only octupole types have sextupole modes:
+        if "SX" in trim_type:
+            typearg="SEXTUPOLE"
+            (self.hasCalibData[typearg], self.status_str_cal[typearg],  self.fieldsmatrix[typearg],  self.currentsmatrix[typearg]) \
+                = process_calibration_data(self.TrimExcitationCurveCurrents_normal_sextupole,self.TrimExcitationCurveFields_normal_sextupole, 2)
+
+
+        #The switchboard mode determines the allowed field component to be controlled.
+        #Note that in the multipole expansion we have:
+        self.allowed_component = 0
         self.get_swb_mode()
-
 
     ###############################################################################
     #
@@ -202,25 +222,19 @@ class TrimCircuit (PyTango.Device_4Impl):
         att_ivc.get_properties(multi_prop_ivc)
         multi_prop_ivc.description = "The length integrated variable component of the field for quadrupoles and sextupoles (k2*l for sextupoles, k1*l for quads)."
 
-        if self.Mode.lower() in ["skew_q","upright_q"]:
+        if self.Mode in ["SKEW_QUADRUPOLE","NORMAL_QUADRUPOLE"]:
             self.allowed_component = 1
             multi_prop_vc.unit   = "m ^-2"
             multi_prop_vc.label  = "k1"
             multi_prop_ivc.unit  = "m ^-1"
             multi_prop_ivc.label = "length integrated k1"
-        elif self.Mode.lower() == "sextupole":
+        elif self.Mode == "SEXTUPOLE":
             self.allowed_component = 2
             multi_prop_vc.unit   = "m ^-3"
             multi_prop_vc.label  = "k2"
             multi_prop_ivc.unit  = "m ^-2"
             multi_prop_ivc.label = "length integrated k2"
-        elif self.Mode.lower() == "octupole":
-            self.allowed_component = 3
-            multi_prop_vc.unit   = "m ^-4"
-            multi_prop_vc.label  = "k3"
-            multi_prop_ivc.unit  = "m ^-3"
-            multi_prop_ivc.label = "length integrated k3"
-        elif self.Mode.lower() in ["hor_corr","ver_corr"]:
+        elif self.Mode in ["X_CORRECTOR","Y_CORRECTOR"]:
             self.allowed_component = 0
             multi_prop_vc.unit   = "rad"
             multi_prop_vc.label  = "theta"
@@ -267,7 +281,6 @@ class TrimCircuit (PyTango.Device_4Impl):
             att = self.get_device_attr().get_attr_by_name("MainFieldComponent")
             multi_prop = PyTango.MultiAttrProp()
             att.get_properties(multi_prop)
-
 
             minMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length,  self.mincurrent, False)[0]
             maxMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length,  self.maxcurrent, False)[0]
@@ -350,16 +363,20 @@ class TrimCircuit (PyTango.Device_4Impl):
                 if self.oldMode == None or self.Mode != self.oldMode:
                     self.debug_stream("SWB mode changed")
                     self.oldMode=self.Mode
-                    if self.Mode not in ["octupole", "sextupole", "upright_q", "skew_q", "hor_corr", "ver_corr"]:
+                    if self.Mode not in self.MODE_NAMES:
                         self.Mode = None
                         self.oldMode = None
-                        self.status_str_swb = 'Mode type invalid %s' % self.Mode
+                        self.status_str_swb = 'Mode type invalid %s' % self.swb_device.Mode
                         self.set_state( PyTango.DevState.FAULT )
                         return False
+
                     #set the allowed component, unit of k, etc
                     self.config_type() 
+
                     #set alarm levels on MainFieldComponent (etc) corresponding to the PS alarms
-                    self.set_field_limits()
+                    if self.hasCalibData[self.Mode]:
+                        self.set_field_limits()
+
                 return True
 
         else:
@@ -402,6 +419,10 @@ class TrimCircuit (PyTango.Device_4Impl):
         if swb_state in ["PyTango.DevState.UNKNOWN","PyTango.DevState.ALARM""PyTango.DevState.FAULT"]:
             self.status_str_swb = "SwitchBoard Device is in state " + str(swb_state)
             return swb_state
+
+        #SWB might be OK but mode invalid
+        if self.Mode == None:
+            return PyTango.DevState.FAULT
 
         #Check PS state if SWB is OK
         ps_state = self.get_ps_state()
@@ -491,7 +512,8 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def is_fieldA_allowed(self, attr):
         self.debug_stream("In read_fieldA_allowed()")
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]  and self.hasCalibData[self.Mode] and self.get_current_and_field() and self.get_swb_mode()
+        #note order here: get the mode before evaluating the field!
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() 
 
     #
 
@@ -508,7 +530,8 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def is_fieldB_allowed(self, attr):
         self.debug_stream("In read_fieldB_allowed()")
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]  and self.hasCalibData[self.Mode] and self.get_current_and_field() and self.get_swb_mode()
+        #note order here: get the mode before evaluating the field!
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() 
 
     #
 
@@ -525,7 +548,8 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def is_fieldANormalised_allowed(self, attr):
         self.debug_stream("In read_fieldANormalised_allowed()")
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]  and self.hasCalibData[self.Mode] and self.get_current_and_field() and self.get_swb_mode()
+        #note order here: get the mode before evaluating the field!
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() 
 
     #
 
@@ -542,7 +566,8 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def is_fieldBNormalised_allowed(self, attr):
         self.debug_stream("In read_fieldBNormalised_allowed()")
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]  and self.hasCalibData[self.Mode] and self.get_current_and_field() and self.get_swb_mode()
+        #note order here: get the mode before evaluating the field!
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() 
 
     #
 
@@ -572,7 +597,7 @@ class TrimCircuit (PyTango.Device_4Impl):
             if self.scaleField:
                 self.debug_stream("Energy (Brho) changed to %f (%f): will recalculate current to preserve field" % (self.energy_r, self.BRho) )
                 #since brho changed, need to recalc the field
-                if self.Tilt == 0 and self.Mode != "ver_corr":
+                if self.Tilt == 0 and self.Mode != "Y_CORRECTOR":
                     self.fieldB[self.allowed_component]  = self.MainFieldComponent_r * self.BRho
                 else:
                     self.fieldA[self.allowed_component]  = self.MainFieldComponent_r * self.BRho
@@ -617,7 +642,7 @@ class TrimCircuit (PyTango.Device_4Impl):
             self.MainFieldComponent_w = attr_MainFieldComponent_write
             #Note that we set the component of the field vector directly here, but
             #calling calculate_fields will in turn set the whole vector, including this component again
-            if self.Tilt == 0 and self.Mode != "ver_corr":
+            if self.Tilt == 0 and self.Mode != "Y_CORRECTOR":
                 self.fieldB[self.allowed_component]  = attr_MainFieldComponent_write * self.BRho
             else:
                 self.fieldA[self.allowed_component]  = attr_MainFieldComponent_write * self.BRho
@@ -629,7 +654,7 @@ class TrimCircuit (PyTango.Device_4Impl):
             self.set_ps_current()
 
     def is_MainFieldComponent_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]  and self.hasCalibData[self.Mode] and self.get_current_and_field() and self.get_swb_mode()
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() 
 
     #
 
@@ -646,125 +671,47 @@ class TrimCircuit (PyTango.Device_4Impl):
 
 class TrimCircuitClass(PyTango.DeviceClass):
 
-    #Class Properties
-    class_property_list = {
-
-        'TrimExcitationCurveCurrents_Sextupole':
-        [PyTango.DevVarStringArray,
-         "Measured calibration currents for each multipole",
-         [ [] ] ],
-        'TrimExcitationCurveFields_Sextupole':
-        [PyTango.DevVarStringArray,
-         "Measured calibration fields for each multipole",
-         [ [] ] ],
-
-        'TrimExcitationCurveCurrents_Octupole':
-        [PyTango.DevVarStringArray,
-         "Measured calibration currents for each multipole",
-         [ [] ] ],
-        'TrimExcitationCurveFields_Octupole':
-        [PyTango.DevVarStringArray,
-         "Measured calibration fields for each multipole",
-         [ [] ] ],
-
-        'TrimExcitationCurveCurrents_Upright_Q':
-        [PyTango.DevVarStringArray,
-         "Measured calibration currents for each multipole",
-         [ [] ] ],
-        'TrimExcitationCurveFields_Upright_Q':
-        [PyTango.DevVarStringArray,
-         "Measured calibration fields for each multipole",
-         [ [] ] ],
-
-        'TrimExcitationCurveCurrents_Skew_Q':
-        [PyTango.DevVarStringArray,
-         "Measured calibration currents for each multipole",
-         [ [] ] ],
-        'TrimExcitationCurveFields_Skew_Q':
-        [PyTango.DevVarStringArray,
-         "Measured calibration fields for each multipole",
-         [ [] ] ],
-
-        'TrimExcitationCurveCurrents_Hor_Corr':
-        [PyTango.DevVarStringArray,
-         "Measured calibration currents for each multipole",
-         [ [] ] ],
-        'TrimExcitationCurveFields_Hor_Corr':
-        [PyTango.DevVarStringArray,
-         "Measured calibration fields for each multipole",
-         [ [] ] ],
-
-        'TrimExcitationCurveCurrents_Ver_Corr':
-        [PyTango.DevVarStringArray,
-         "Measured calibration currents for each multipole",
-         [ [] ] ],
-        'TrimExcitationCurveFields_Ver_Corr':
-        [PyTango.DevVarStringArray,
-         "Measured calibration fields for each multipole",
-         [ [] ] ],
-
-    }
-
-
-    #Device Properties
     device_property_list = {
-
-        #override class level calibration if given
-
-        'TrimExcitationCurveCurrents_Sextupole':
+        'TrimExcitationCurveCurrents_normal_sextupole':
         [PyTango.DevVarStringArray,
-         "Measured calibration currents for each multipole",
+         "Measured calibration field or current for each multipole",
          [ [] ] ],
-        'TrimExcitationCurveFields_Sextupole':
+        'TrimExcitationCurveCurrents_normal_quadrupole':
         [PyTango.DevVarStringArray,
-         "Measured calibration fields for each multipole",
+         "Measured calibration field or current for each multipole",
          [ [] ] ],
-
-        'TrimExcitationCurveCurrents_Octupole':
+        'TrimExcitationCurveCurrents_skew_quadrupole':
         [PyTango.DevVarStringArray,
-         "Measured calibration currents for each multipole",
+         "Measured calibration field or current for each multipole",
          [ [] ] ],
-        'TrimExcitationCurveFields_Octupole':
+        'TrimExcitationCurveCurrents_x_corrector':
         [PyTango.DevVarStringArray,
-         "Measured calibration fields for each multipole",
+         "Measured calibration field or current for each multipole",
          [ [] ] ],
-
-        'TrimExcitationCurveCurrents_Upright_Q':
+        'TrimExcitationCurveCurrents_y_corrector':
         [PyTango.DevVarStringArray,
-         "Measured calibration currents for each multipole",
+         "Measured calibration field or current for each multipole",
          [ [] ] ],
-        'TrimExcitationCurveFields_Upright_Q':
+        'TrimExcitationCurveFields_normal_sextupole':
         [PyTango.DevVarStringArray,
-         "Measured calibration fields for each multipole",
+         "Measured calibration field or current for each multipole",
          [ [] ] ],
-
-        'TrimExcitationCurveCurrents_Skew_Q':
+        'TrimExcitationCurveFields_normal_quadrupole':
         [PyTango.DevVarStringArray,
-         "Measured calibration currents for each multipole",
+         "Measured calibration field or current for each multipole",
          [ [] ] ],
-        'TrimExcitationCurveFields_Skew_Q':
+        'TrimExcitationCurveFields_skew_quadrupole':
         [PyTango.DevVarStringArray,
-         "Measured calibration fields for each multipole",
+         "Measured calibration field or current for each multipole",
          [ [] ] ],
-
-        'TrimExcitationCurveCurrents_Hor_Corr':
+        'TrimExcitationCurveFields_x_corrector':
         [PyTango.DevVarStringArray,
-         "Measured calibration currents for each multipole",
+         "Measured calibration field or current for each multipole",
          [ [] ] ],
-        'TrimExcitationCurveFields_Hor_Corr':
+        'TrimExcitationCurveFields_y_corrector':
         [PyTango.DevVarStringArray,
-         "Measured calibration fields for each multipole",
+         "Measured calibration field or current for each multipole",
          [ [] ] ],
-
-        'TrimExcitationCurveCurrents_Ver_Corr':
-        [PyTango.DevVarStringArray,
-         "Measured calibration currents for each multipole",
-         [ [] ] ],
-        'TrimExcitationCurveFields_Ver_Corr':
-        [PyTango.DevVarStringArray,
-         "Measured calibration fields for each multipole",
-         [ [] ] ],
-
         'PowerSupplyProxy':
         [PyTango.DevString,
          "Associated powersupply",
@@ -778,9 +725,7 @@ class TrimCircuitClass(PyTango.DeviceClass):
          "List of magnets on this circuit",
          [ "not set" ] ],
         }
-
-
-
+    
     #Attribute definitions
     attr_list = {
         'mode':

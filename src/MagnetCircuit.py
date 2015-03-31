@@ -83,7 +83,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.get_device_properties(self.get_device_class())
 
         #energy attribute eventually to be set by higher level device
-        self.energy_r = 100000000.0 #=100 MeV for testing, needs to be read from somewhere
+        self.energy_r = 300000000.0 #=100 MeV for testing, needs to be read from somewhere
         self.energy_w = None
         self.calculate_brho() #a conversion factor that depends on energy
 
@@ -134,7 +134,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
         #process the calibration data into useful numpy arrays 
         (self.hasCalibData, self.status_str_cal,  self.fieldsmatrix,  self.currentsmatrix) \
-            = process_calibration_data(self.ExcitationCurveCurrents,self.ExcitationCurveFields)
+            = process_calibration_data(self.ExcitationCurveCurrents,self.ExcitationCurveFields, self.allowed_component)
 
         #set alarm levels on MainFieldComponent (etc) corresponding to the PS alarms
         if self.hasCalibData:
@@ -201,7 +201,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.set_state( PyTango.DevState.FAULT )
         else:
             self.debug_stream("Magnet length/type/tilt :  %f/%s/%d " % (self.Length, self.Type, self.Tilt))
-        
+
 
     ##############################################################################################################
     #
@@ -370,7 +370,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
     def get_current_and_field(self):
 
         self.debug_stream("In get_current_and_field()")
-
         if self.ps_device:
             try:
                 current_att = self.ps_device.read_attribute("Current")
@@ -560,7 +559,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
         if self.hasCalibData:
             self.set_field_limits()
 
-
         #If energy changes, current or field must also change
         #Can only do something if calibrated
         if self.hasCalibData:
@@ -604,8 +602,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
     def read_MainFieldComponent(self, attr):
         self.debug_stream("In read_MainFieldComponent()")
         if self.hasCalibData == True:
-            attr_MainFieldComponent_read = self.MainFieldComponent_r
-            attr.set_value(attr_MainFieldComponent_read)
+            attr.set_value(self.MainFieldComponent_r)
             attr.set_write_value(self.MainFieldComponent_w)
 
     def write_MainFieldComponent(self, attr):

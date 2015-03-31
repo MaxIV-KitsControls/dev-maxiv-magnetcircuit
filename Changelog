@@ -80,3 +80,7 @@
 26-03-2015 Paul Bell	
 	* Option to not apply trim field in magnet
 	* v1.3.6
+
+30-03-2015 Paul Bell
+	* Start more unit tests, trim circuit fixes
+	* v1.3.7

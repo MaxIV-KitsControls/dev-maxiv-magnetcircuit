@@ -22,14 +22,19 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
     #Calculate all field components which will include the one we already set, using actual current in PS
     #Allowed component is zero for solenoids and dipoles, but need to distinguish between them with ugly is_sole flag
 
-    fieldA = [np.NAN]*10
-    fieldB = [np.NAN]*10
-    fieldANormalised = [np.NAN]*10
-    fieldBNormalised = [np.NAN]*10
+    fieldA = [np.NAN]*_maxdim
+    fieldB = [np.NAN]*_maxdim
+    fieldANormalised = [np.NAN]*_maxdim
+    fieldBNormalised = [np.NAN]*_maxdim
     thiscomponent = 0.0
 
     #We set all the field components, not just the allowed one:
     for i in range (0,_maxdim):
+
+        #only need to set field elements up to multipole for which we have data
+        #calib data above are all Nan
+        if np.isnan(currentsmatrix[i]).any():
+            break
 
         #NB: i=0 for dipoles, 1 for quad, 2 for sext
         #There is an extra sign, 1 for dipoles, -1 for quads and sext
@@ -52,7 +57,7 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
 
         calcfield_norm = calcfield / brho
         setfield_norm  = setfield / brho
-            
+
         #There is a factor 1/n! (so factor 1/2 for sextupole for which n=2)
         #For a sext: Given a current we get back k2 * length/2 * BRho
         #k2 * BRho is the element of fieldB, k2 is the element of fieldB_norm
@@ -67,9 +72,11 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
 
         #For a sole, get back B_s directly, no scaling by brho
 
-        if tilt == 0 and typ not in ["vkick","skew_q","ver_corr"]:
+        if tilt == 0 and typ not in ["vkick","SKEW_QUADRUPOLE","Y_CORRECTOR"]:
             fieldB[i] = calcfield
             fieldBNormalised[i] = calcfield_norm
+            fieldA[i] = 0.0
+            fieldANormalised[i] = 0.0
             if i==allowed_component:
                 #print "Setting this component", fieldB[i] 
                 thiscomponent=calcfield_norm
@@ -81,6 +88,8 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
         else:
             fieldA[i] = calcfield 
             fieldANormalised[i] = calcfield_norm 
+            fieldB[i] = 0.0
+            fieldBNormalised[i] = 0.0
             if i==allowed_component:
                 #print "Setting this component", fieldA[i]
                 thiscomponent=calcfield_norm
@@ -109,7 +118,7 @@ def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, pol
         sign =  1
         length = 1.0
 
-    if tilt == 0 and typ not in ["vkick","skew_q","ver_corr"]:
+    if tilt == 0 and typ not in ["vkick","SKEW_QUADRUPOLE","Y_CORRECTOR"]:
         intBtimesBRho = fieldB[allowed_component]*length * poltimesorient * sign
     else:
         intBtimesBRho = fieldA[allowed_component]*length * poltimesorient * sign
