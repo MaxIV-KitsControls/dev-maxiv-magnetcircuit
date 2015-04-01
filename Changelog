@@ -84,3 +84,7 @@
 30-03-2015 Paul Bell
 	* Start more unit tests, trim circuit fixes
 	* v1.3.7
+
+01-04-2015 Paul Bell
+	* More tests, some fixes as a result...
+	* v1.3.8
