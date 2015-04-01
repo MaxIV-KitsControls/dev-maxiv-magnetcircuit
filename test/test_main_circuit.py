@@ -9,71 +9,61 @@ import PyTango
 
 import Magnet
 import MagnetCircuit
-#from dummy_ps.DummyPS import DummyPS, DummyPSClass
-
-print "hej"
 
 from unittest import skip
 from devicetest import DeviceTestCase
 
-import devicetest
-print devicetest.__path__
-
-
 # Device test case
-class MagnetCircuitQuadTestCase(DeviceTestCase):
-
-    # device = Magnet.Magnet
-    # device_cls = Magnet.MagnetClass
+class MagnetCircuitTestCase(DeviceTestCase):
 
     magnets = {
-        "I-BC1/MAG/SXL-01": {
-            "Polarity": [
-                "1"
-            ],
+        "SECTION/MAG/MAG-01": {
             "Length": [
-                "0.1"
-            ],
-            "Orientation": [
-                "1"
+                "1.0"
             ],
             "Tilt": [
                 "0"
-            ],
-            "TemperatureInterlock": [
-                "I-BC1/DIA/COOLING,B_I_BC1SXL2_DIA_TSW1_A,Temp > 60 alarm to TANGO",
-                "I-BC1/DIA/COOLING,B_I_BC1SXL_DIA_TSW2_A,Temp > 70 alarm to TANGO"
             ],
             "Type": [
                 "ksext"
             ],
             "CircuitProxies": [
-                "I-BC1/MAG/CRSX-01"
+                "SECTION/MAG/CRMAG-01"
+            ],
+            "ExcitationCurveCurrents": [
+                "[2.0, 0.0]",
+                "[2.0, 0.0]",
+                "[2.0, 0.0]"
+            ],
+            "ExcitationCurveFields": [
+                "[3.0, 0.0]",
+                "[3.0, 0.0]",
+                "[3.0, 0.0]"
             ]
         },
-        "I-BC1/MAG/SXL-02": {
-            "Polarity": [
-                "-1"
-            ],
+        "SECTION/MAG/MAG-02": {
             "Length": [
-                "0.1"
-            ],
-            "Orientation": [
-                "1"
+                "1.0"
             ],
             "Tilt": [
                 "0"
-            ],
-            "TemperatureInterlock": [
-                "I-BC1/DIA/COOLING,B_I_BC1SXL1_DIA_TSW1_A,Temp > 60 alarm to TANGO",
-                "I-BC1/DIA/COOLING,B_I_BC1SXL_DIA_TSW2_A,Temp > 70 alarm to TANGO"
             ],
             "Type": [
                 "ksext"
             ],
             "CircuitProxies": [
-                "I-BC1/MAG/CRSX-01"
-            ]
+                "SECTION/MAG/CRMAG-01"
+            ],
+            "ExcitationCurveCurrents": [
+                "[2.0, 0.0]",
+                "[2.0, 0.0]",
+                "[2.0, 0.0]"
+            ],
+            "ExcitationCurveFields": [
+                "[1.0, 0.0]",
+                "[1.0, 0.0]",
+                "[1.0, 0.0]"
+            ],
         }
     }
 
@@ -82,30 +72,21 @@ class MagnetCircuitQuadTestCase(DeviceTestCase):
 
     properties = {
         "PowerSupplyProxy": [
-            "I-KBC1/MAG/PSPA-01"
-        ],
-        "RiseTime": [
-            "0.0"
-        ],
-        "CoilNames": [
-            "A"
+            "SECTION/MAG/PSMAG-01"
         ],
         "ExcitationCurveCurrents": [
-            "[0, 0]",
-            "[0, 0]",
-            "[8.710522, 0.0]"
+            "[2.0, 0.0]",
+            "[2.0, 0.0]",
+            "[2.0, 0.0]"
         ],
         "ExcitationCurveFields": [
-            "[0, 0]",
-            "[0, 0]",
-            "[2.8373088305302416, 0.02826327945820069]"
-        ],
-        "ResistanceReference": [
-            "0.0"
+            "[2.0, 0.0]",
+            "[2.0, 0.0]",
+            "[2.0, 0.0]"
         ],
         "MagnetProxies": [
-            "I-BC1/MAG/SXL-01",
-            "I-BC1/MAG/SXL-02"
+            "SECTION/MAG/MAG-01",
+            "SECTION/MAG/MAG-02"
         ]
     }
 
@@ -121,7 +102,7 @@ class MagnetCircuitQuadTestCase(DeviceTestCase):
 
         def get_ps_attribute_config(attr):
             config = MagicMock()
-            config.min_value = 0
+            config.min_value = -10
             config.max_value = 10
             return config
 
@@ -152,19 +133,27 @@ class MagnetCircuitQuadTestCase(DeviceTestCase):
 
         cls.device_proxy = MagnetCircuit.PyTango.DeviceProxy = MagicMock(side_effect=proxy_result)
 
+    #Test 1
     def test_state_on_when_ps_is_on(self):
+        print "Test 1.1"
         self.ps_proxy.State.return_value = PyTango.DevState.ON
         self.assertEqual(self.device.State(), PyTango.DevState.ON)
 
+    #Test 2
     def test_state_off_when_ps_is_off(self):
+        print "Test 1.2"
         self.ps_proxy.State.return_value = PyTango.DevState.OFF
         self.assertEqual(self.device.State(), PyTango.DevState.OFF)
 
+    #Test 3
     def test_state_fault_when_ps_is_down(self):
+        print "Test 1.3"
         self.ps_proxy.State.side_effect = PyTango.DevFailed
         self.assertEqual(self.device.State(), PyTango.DevState.FAULT)
 
+    #Test 4
     def test_state_recovers_when_ps_recovers(self):
+        print "Test 1.4"
 
         # simulate PS device broken
         self.ps_proxy.State.side_effect = PyTango.DevFailed
@@ -175,32 +164,54 @@ class MagnetCircuitQuadTestCase(DeviceTestCase):
         self.ps_proxy.State.side_effect = None
         self.assertEqual(self.device.State(), PyTango.DevState.ON)
 
-    def test_in_fault_if_magnet_types_not_the_same(self):
-        self.magnet_proxies.values()[0].Type = ["kquad"]
-        self.device.Init()
-        self.assertEqual(self.ps_proxy.State(), PyTango.DevState.ON)
-        self.assertEqual(self.device.State(), PyTango.DevState.FAULT)
+    #Test 5
+    def test_status_shows_if_magnet_types_not_the_same(self):
+        self.magnet_proxies["SECTION/MAG/MAG-01"].Type = ["kquad"]
+        print "Test 1.5"
+        self.device.Init()        
+        #print "Test 1.5", self.device.Status()
+        self.assertIn("Problems with properties of magnet device", self.device.Status())
 
-    @skip("requires properties to be changed, which is not supported for now")
-    def test_in_fault_if_calibration_data_inconsistent(self):
-        self.device.put_property({"ExcitationCurveCurrents": ["[0, 0]","[2.83]"]})
-        self.device.Init()
-        self.assertEqual(self.ps_proxy.State(), PyTango.DevState.ON)
-        self.assertEqual(self.device.State(), PyTango.DevState.FAULT)
+    #Test 6
+    def test_k_zero_when_current_zero(self):
+        print "Test 1.6"
+        #have to set current on ps
+        self.ps_proxy.read_attribute("Current").value = 0.0
+        self.ps_proxy.read_attribute("Current").w_value = 0.0
+        self.assertEqual(self.device.MainFieldComponent, self.ps_proxy.read_attribute("Current").value)
 
-    def test_field_is_zero_when_current_is_zero(self):
-        self.ps_proxy.Current = 0.0
-        current = MagicMock()
-        current.w_value = 0.0
-        self.ps_proxy.read_attribute.side_effect = lambda _: current
-        self.assertEqual(self.device.MainFieldComponent, 0.0)
+    #Test 7 - for a sext (2 factorial factor for sext and factor -1)
+    def test_k2_two_when_current_one(self):
+	print "Test 1.7"
+	#have to set current on ps
+	self.ps_proxy.read_attribute("Current").value = 1.0
+	self.ps_proxy.read_attribute("Current").w_value = 1.0
+	field = -1.0 * self.device.MainFieldComponent
+	self.assertTrue(field-0.01 < 2.0 < field+0.01)
 
-    def test_field_is_max_when_current_is_max(self):
-        self.ps_proxy.Current = 8.710522
-        current = MagicMock()
-        current.w_value = 8.71
-        self.ps_proxy.read_attribute.side_effect = lambda _: current
-        config = self.device.get_attribute_config("MainFieldComponent")
-        epsilon = 0.00001
-        min_value = float(config.min_value)
-        self.assertTrue(min_value - epsilon < self.device.MainFieldComponent < min_value + epsilon)
+    #Test 8 - for a kquad
+    def test_k1_one_when_current_one(self):
+        print "Test 1.8"
+
+    	#have to set current on ps
+    	self.ps_proxy.read_attribute("Current").value = 1.0
+    	self.ps_proxy.read_attribute("Current").w_value = 1.0
+
+        self.magnet_proxies["SECTION/MAG/MAG-01"].Type = ["kquad"]
+        self.magnet_proxies["SECTION/MAG/MAG-02"].Type = ["kquad"]  
+        print "set kquads"
+        self.device.Init() 
+
+        print self.device.Status()
+        field = -1.0 * self.device.MainFieldComponent
+    	self.assertTrue(field-0.01 < 1.0 < field+0.01)
+
+
+
+    #@skip("requires properties to be changed, which is not supported for now")
+    #def test_in_fault_if_calibration_data_inconsistent(self):
+    #    self.device.put_property({"ExcitationCurveCurrents": ["[0, 0]","[2.83]"]})
+    #    self.device.Init()
+    #    self.assertEqual(self.ps_proxy.State(), PyTango.DevState.ON)
+    #    self.assertEqual(self.device.State(), PyTango.DevState.FAULT)
+

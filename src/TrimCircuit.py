@@ -60,6 +60,7 @@ class TrimCircuit (PyTango.Device_4Impl):
 
 
     def init_device(self):
+
         self.debug_stream("In init_device()")
         self.set_state(PyTango.DevState.ON)
 

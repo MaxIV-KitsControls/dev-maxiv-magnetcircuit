@@ -194,6 +194,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
                             problematic_devices.add(magnet_device_name)
 
 
+
         # If there were any issues go to FAULT
         if problematic_devices:
             self.status_str_prop = 'Problems with properties of magnet device(s): %s. Fix and do INIT' % ", ".join(problematic_devices)
@@ -383,6 +384,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 #calculate the actual and set fields
                 (self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
                     = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.actual_current, self.set_current, self.is_sole)
+
                 return True
 
 

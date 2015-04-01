@@ -36,8 +36,10 @@ def process_calibration_data(ExcitationCurveCurrents, ExcitationCurveFields, all
     if len(ExcitationCurveCurrents) != len(ExcitationCurveFields):
         return hasCalibData, "Calibration data have mis-matched dimensions", None, None
 
-    #check dimensions against allowed comp, e.g if sext must be dim 3
-    if allowedcomp!=len(ExcitationCurveCurrents)-1:
+    #check dimensions against allowed comp, e.g if sext (allowed comp=2), must have 0, 1 and 2 elements filled, so dim 3
+    #allowed comp = 2 means need 3 dim, so require dim>allowed comp
+    #can have higher dimensions filled, too!
+    if len(ExcitationCurveCurrents) <= allowedcomp:
         return hasCalibData, "Calibration data incompatible with magnet type.", None, None
 
     #Assume now the circuit/magnet is calibrated

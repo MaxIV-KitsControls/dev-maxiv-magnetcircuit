@@ -49,6 +49,7 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
         #k1 * BRho is the element of fieldB, k1 is the element of fieldB_norm
         #print "will interp with", currentsmatrix[i], fieldsmatrix[i]
         #print "interp ", actual_current, np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i])
+
         calcfield = sign * poltimesorient * np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length 
         if set_current is not None:
             setfield = sign * poltimesorient * np.interp(set_current, currentsmatrix[i], fieldsmatrix[i]) / length 
