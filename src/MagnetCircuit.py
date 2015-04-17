@@ -414,6 +414,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     def check_cycling_state(self):
         #see if reached end of cycle
+        self.check_cycling_status()
         if self.iscycling == True and "NOT CYCLING" in self.cyclingphase:
             self.iscycling=False
 
@@ -466,7 +467,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.debug_stream("In read_currentSet()")
         attr.set_value(self.set_current)
 
-    def is_currentCalculated_allowed(self, attr):
+    def is_currentSet_allowed(self, attr):
         return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
        
     #

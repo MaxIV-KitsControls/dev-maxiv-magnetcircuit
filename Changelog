@@ -88,3 +88,7 @@
 01-04-2015 Paul Bell
 	* More tests, some fixes as a result...
 	* v1.3.8
+
+17-04-2015 Paul Bell
+	* Bug fixing before deployment for Phase 3 SST
+	* v1.4.0
