@@ -92,3 +92,8 @@
 17-04-2015 Paul Bell
 	* Bug fixing before deployment for Phase 3 SST
 	* v1.4.0
+
+20-04-2015 Paul Bell
+	* Fill first element of field vector for correctors (unlike dipoles)
+	* Do not allow to interpolate a field beyond the max current
+	* v1.4.1

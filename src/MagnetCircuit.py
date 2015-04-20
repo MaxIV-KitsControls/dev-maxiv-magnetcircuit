@@ -101,14 +101,18 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #Some status strings
         self.status_str_prop  = ""
         self.status_str_ps    = ""
+        self.status_str_b     = ""
         self.status_str_cal   = ""
         self.status_str_cyc   = ""
         self.status_str_cfg   = ""
         self.status_str_fin   = ""
+        self.field_out_of_range = False
         self.iscycling = False
         self.cyclingphase = "Cycling not set up"
         self.IntFieldQ = PyTango.AttrQuality.ATTR_VALID
         self.is_sole = False #hack for solenoids until configured properly
+        self.is_corr = False #correctors differ from dipoles (theta vs Theta)
+
 
         #Proxy to power supply device
         self._ps_device = None
@@ -129,12 +133,12 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.allowed_component = 0
         self.config_type()
 
-        #set limits on current
-        self.set_current_limits()
-
         #process the calibration data into useful numpy arrays 
         (self.hasCalibData, self.status_str_cal,  self.fieldsmatrix,  self.currentsmatrix) \
             = process_calibration_data(self.ExcitationCurveCurrents,self.ExcitationCurveFields, self.allowed_component)
+
+        #set limits on current
+        self.set_current_limits()
 
         #set alarm levels on MainFieldComponent (etc) corresponding to the PS alarms
         if self.hasCalibData:
@@ -211,7 +215,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         att_vc = self.get_device_attr().get_attr_by_name("MainFieldComponent")
         multi_prop_vc = PyTango.MultiAttrProp()
         att_vc.get_properties(multi_prop_vc)
-        multi_prop_vc.description = "The variable component of the field, which depends on the magnet type (k2 for sextupoles, k1 for quads, theta for dipoles, B_s for solenoids)"
+        multi_prop_vc.description = "The variable component of the field, which depends on the magnet type (k2 for sextupoles, k1 for quads, Theta for dipoles, theta for correctors, B_s for solenoids)"
 
         att_ivc = self.get_device_attr().get_attr_by_name("IntMainFieldComponent")
         multi_prop_ivc = PyTango.MultiAttrProp()
@@ -236,14 +240,15 @@ class MagnetCircuit (PyTango.Device_4Impl):
             multi_prop_vc.label  = "k3"
             multi_prop_ivc.unit  = "m ^-4"
             multi_prop_ivc.label = "length integrated k3"
-        #h and vkick useg small theta - not yet implemented, incorrect
+        #h and vkick useg small theta
         elif self.Type in ["hkick","vkick"]:
             self.allowed_component = 0
             multi_prop_vc.unit   = "rad"
             multi_prop_vc.label  = "theta"
             multi_prop_ivc.unit  = "rad m"
             multi_prop_ivc.label = "length integrated theta"
-        #Large theta for bends.  Note that first element of field is always zero, but use it to store theta
+            self.is_corr = True
+        #Large theta for bends.  Note that first element of field is always zero, but use it to store Theta
         elif self.Type == "csrcsbend" or self.Type == "sben" or self.Type == "rben" or self.Type == "sbend":
             self.allowed_component = 0
             multi_prop_vc.unit   = "rad"
@@ -307,8 +312,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
             att.get_properties(multi_prop)
 
 
-            minMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length,  self.mincurrent, is_sole=self.is_sole)[0]
-            maxMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length,  self.maxcurrent, is_sole=self.is_sole)[0]
+            minMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length,  self.mincurrent, is_sole=self.is_sole, find_limit=True)[1]
+            maxMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length,  self.maxcurrent, is_sole=self.is_sole, find_limit=True)[1]
 
             #print "calc min  limit for ", self.mincurrent, minMainFieldComponent
             #print "calc max  limit for ", self.maxcurrent, maxMainFieldComponent
@@ -376,15 +381,20 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 current_att = self.ps_device.read_attribute("Current")
                 self.actual_current = current_att.value
                 self.set_current = current_att.w_value
+                self.status_str_b = ""
                 #Just assume the set current is whatever is written on the ps device (could be written directly there!)
             except:
                 self.debug_stream("Cannot read current on PS " + self.PowerSupplyProxy)
                 return False
             else:
                 #calculate the actual and set fields
-                (self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
-                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.actual_current, self.set_current, self.is_sole)
+                (success, self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
+                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.actual_current, self.set_current, is_sole=self.is_sole)
 
+                self.field_out_of_range = False
+                if success==False:
+                    self.status_str_b = "Cannot interpolate read/set currents %f/%f " % (self.actual_current,self.set_current)
+                    self.field_out_of_range = True
                 return True
 
 
@@ -395,13 +405,19 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     ##############################################################################################################
     #
-    def read_attr_hardware(self,data):
-        pass
-
     def dev_state(self):
 
         #Check state of PS
         ps_state = self.get_ps_state()
+
+        #if state ok but cycler not setup, then set it up
+        if ps_state == PyTango.DevState.ON and self._cycler == None:
+            #set limits on current
+            self.set_current_limits()
+            #set alarm levels on MainFieldComponent (etc) corresponding to the PS alarms
+            if self.hasCalibData:
+                self.set_field_limits()
+            self.setup_cycler()
 
         #Generally the circuit should echo the ps state
         #If we are in RUNNING, ie cycling, stay there unless ps goes to fault
@@ -430,14 +446,17 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.check_cycling_status()
 
         #set status message
-        msg = self.status_str_prop +"\n"+ self.status_str_cfg +"\n"+ self.status_str_cal +"\n"+ self.status_str_ps +"\n"+ self.status_str_cyc + "\nCycling status: " +  self.cyclingphase
+        msg = self.status_str_prop +"\n"+ self.status_str_cfg +"\n"+ self.status_str_cal +"\n"+ self.status_str_ps +"\n"+ self.status_str_b +"\n"+ self.status_str_cyc + "\nCycling status: " +  self.cyclingphase
         self.status_str_fin = os.linesep.join([s for s in msg.splitlines() if s])
         return  self.status_str_fin
 
     ##############################################################################################################
 
     #Special function to set zeroth element of field vector to zero, as it should be for dipoles
-    #(We use the zeroth element to store theta, but should not be returned)
+    #Dipoles and solenoids both have allowed component= 0
+    #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
+    #For solenoids, we store Bs there. But n reality zeroth element is zero. See wiki page for details.
+    #But for correctors small theta is the zeroth component.
     def convert_dipole_vector(self,vector):
         returnvector = list(vector)
         returnvector[0]=np.NAN
@@ -483,65 +502,49 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     def read_fieldA(self, attr):
         self.debug_stream("In read_fieldA()")
-        #Dipoles and solenoids both have allowed component= 0
-        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
-        #For solenoids, we store Bs there
-        #BUT in reality zeroth element is zero. See wiki page for details.
-        if self.allowed_component == 0:
+        if self.allowed_component == 0 and not self.is_corr:
             attr.set_value(self.convert_dipole_vector(self.fieldA))
         else:
             attr.set_value(self.fieldA)
 
     def is_fieldA_allowed(self, attr):
-        return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and not self.field_out_of_range
 
     #
 
     def read_fieldB(self, attr):
         self.debug_stream("In read_fieldB()")
-        #Dipoles and solenoids both have allowed component= 0
-        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
-        #For solenoids, we store Bs there
-        #BUT in reality zeroth element is zero. See wiki page for details.
-        if self.allowed_component == 0:
+        if self.allowed_component == 0 and not self.is_corr:
             attr.set_value(self.convert_dipole_vector(self.fieldB))
         else:
             attr.set_value(self.fieldB)
 
     def is_fieldB_allowed(self, attr):
-        return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and not self.field_out_of_range
 
     #
 
     def read_fieldANormalised(self, attr):
         self.debug_stream("In read_fieldANormalised()")
-        #Dipoles and solenoids both have allowed component= 0
-        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
-        #For solenoids, we store Bs there
-        #BUT in reality zeroth element is zero. See wiki page for details.
-        if self.allowed_component == 0:
+        if self.allowed_component == 0 and not self.is_corr:
             attr.set_value(self.convert_dipole_vector(self.fieldANormalised))
         else:
             attr.set_value(self.fieldANormalised)
 
     def is_fieldANormalised_allowed(self, attr):
-        return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and not self.field_out_of_range
 
     #
 
     def read_fieldBNormalised(self, attr):
         self.debug_stream("In read_fieldBNormalised()")
-        #Dipoles and solenoids both have allowed component= 0
-        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
-        #For solenoids, we store Bs there
-        #BUT in reality zeroth element is zero. See wiki page for details.
-        if self.allowed_component == 0:
+        if self.allowed_component == 0 and not self.is_corr:
             attr.set_value(self.convert_dipole_vector(self.fieldBNormalised))
         else:
             attr.set_value(self.fieldBNormalised)
 
     def is_fieldBNormalised_allowed(self, attr):
-        return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and not self.field_out_of_range
 
     #
 
@@ -579,8 +582,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 self.set_ps_current()
             else:
                 self.debug_stream("Energy changed: will recalculate fields for the PS current")
-                (self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
-                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.actual_current, self.set_current, self.is_sole)
+                (success, self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
+                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.actual_current, self.set_current, is_sole=self.is_sole)
 
 
     def is_energy_allowed(self, attr):
@@ -622,12 +625,13 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
             self.set_current \
                 = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.fieldA, self.fieldB, self.is_sole)
+
             ###########################################################
             #Set the current on the ps
             self.set_ps_current()
 
     def is_MainFieldComponent_allowed(self, attr):
-        return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and not self.field_out_of_range
 
     #
 
@@ -639,7 +643,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             attr.set_quality(self.IntFieldQ)
 
     def is_IntMainFieldComponent_allowed(self, attr):
-        return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and not self.field_out_of_range
 
     #
 
@@ -784,7 +788,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
         PyTango.SCALAR,
           PyTango.READ_WRITE],
          {
-             'label': "Preserve norm. field on energy change",
+             'label': "Preserve norm. field",
              'unit': "T/F",
          } ],
         'BRho':

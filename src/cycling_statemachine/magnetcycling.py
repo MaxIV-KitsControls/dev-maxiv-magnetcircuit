@@ -80,7 +80,7 @@ class MagnetCycling(object):
     def phase(self):
         """Get the 'phase' of the conditioning; a high-level state"""
         if not self.statemachine:
-            return "NOT CYCLING (limits are %s %s)"  % (self.locurrent_set_point, self.hicurrent_set_point)
+            return "NOT CYCLING (limits are %s %s A)"  % (self.locurrent_set_point, self.hicurrent_set_point)
         return (self.statemachine.state + self.statemachine.iterationstatus) 
 
     def ramp(self, dt=1.0):

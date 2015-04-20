@@ -85,11 +85,12 @@ class TrimCircuit (PyTango.Device_4Impl):
         #Some status strings
         self.status_str_prop  = ""
         self.status_str_ps    = ""
+        self.status_str_b     = ""
         self.status_str_swb   = ""
         self.status_str_cal   = {}
         self.status_str_cfg   = ""
         self.status_str_fin   = ""
-        self.IntFieldQ = PyTango.AttrQuality.ATTR_VALID
+        self.field_out_of_range = False
 
         #Proxy to switch board device
         self._swb_device = None
@@ -283,8 +284,8 @@ class TrimCircuit (PyTango.Device_4Impl):
             multi_prop = PyTango.MultiAttrProp()
             att.get_properties(multi_prop)
 
-            minMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length,  self.mincurrent, False)[0]
-            maxMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length,  self.maxcurrent, False)[0]
+            minMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length,  self.mincurrent, is_sole=False, find_limit=True)[1]
+            maxMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length,  self.maxcurrent, is_sole=False, find_limit=True)[1]
 
             #print "calc min  limit for ", self.mincurrent, minMainFieldComponent
             #print "calc max  limit for ", self.maxcurrent, maxMainFieldComponent
@@ -330,6 +331,7 @@ class TrimCircuit (PyTango.Device_4Impl):
                 current_att = self.ps_device.read_attribute("Current")
                 self.actual_current = current_att.value
                 self.set_current = current_att.w_value
+                self.status_str_b = ""
                 #Just assume the set current is whatever is written on the ps device (could be written directly there!)
             except:
                 self.debug_stream("Cannot read current on PS " + self.PowerSupplyProxy)
@@ -337,8 +339,13 @@ class TrimCircuit (PyTango.Device_4Impl):
             else:  
                 if self.hasCalibData[self.Mode]:
                     #calculate the actual and set fields
-                    (self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
-                        = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.actual_current, self.set_current, False)
+                    (success, self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
+                        = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.actual_current, self.set_current, is_sole=False)
+
+                self.field_out_of_range = False
+                if success==False:
+                    self.status_str_b = "Cannot interpolate read/set currents %f/%f " % (self.actual_current,self.set_current)
+                    self.field_out_of_range = True
                 return True
 
         else:
@@ -435,7 +442,7 @@ class TrimCircuit (PyTango.Device_4Impl):
         if self.Mode != None:
             msg = "Mode: " + self.Mode +"\n"+ self.status_str_prop +"\n"+ self.status_str_cfg +"\n"+ self.status_str_cal[self.Mode] +"\n"+ self.status_str_ps +"\n"+ self.status_str_swb 
         else:
-            msg = "Mode is invalid\n" + self.status_str_prop +"\n"+ self.status_str_cfg +"\n"+  self.status_str_ps +"\n"+ self.status_str_swb 
+            msg = "Mode is invalid\n" + self.status_str_prop +"\n"+ self.status_str_cfg +"\n"+  self.status_str_ps +"\n"+ self.status_str_b + "\n" + self.status_str_swb 
         #self.set_status(os.linesep.join([s for s in self.status_str_fin.splitlines() if s]))
         self.status_str_fin = os.linesep.join([s for s in msg.splitlines() if s])
         return self.status_str_fin
@@ -514,7 +521,7 @@ class TrimCircuit (PyTango.Device_4Impl):
     def is_fieldA_allowed(self, attr):
         self.debug_stream("In read_fieldA_allowed()")
         #note order here: get the mode before evaluating the field!
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() 
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() and not self.field_out_of_range
 
     #
 
@@ -532,7 +539,7 @@ class TrimCircuit (PyTango.Device_4Impl):
     def is_fieldB_allowed(self, attr):
         self.debug_stream("In read_fieldB_allowed()")
         #note order here: get the mode before evaluating the field!
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() 
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() and not self.field_out_of_range 
 
     #
 
@@ -550,7 +557,7 @@ class TrimCircuit (PyTango.Device_4Impl):
     def is_fieldANormalised_allowed(self, attr):
         self.debug_stream("In read_fieldANormalised_allowed()")
         #note order here: get the mode before evaluating the field!
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() 
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() and not self.field_out_of_range
 
     #
 
@@ -568,7 +575,7 @@ class TrimCircuit (PyTango.Device_4Impl):
     def is_fieldBNormalised_allowed(self, attr):
         self.debug_stream("In read_fieldBNormalised_allowed()")
         #note order here: get the mode before evaluating the field!
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() 
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() and not self.field_out_of_range 
 
     #
 
@@ -609,8 +616,8 @@ class TrimCircuit (PyTango.Device_4Impl):
                 self.set_ps_current()
             else:
                 self.debug_stream("Energy changed: will recalculate fields for the PS current")
-                (self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
-                    = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.actual_current, self.set_current, False)
+                (success, self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
+                    = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.actual_current, self.set_current, is_sole=False)
 
 
     def is_energy_allowed(self, attr):
@@ -655,7 +662,7 @@ class TrimCircuit (PyTango.Device_4Impl):
             self.set_ps_current()
 
     def is_MainFieldComponent_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() 
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() and not self.field_out_of_range
 
     #
 
@@ -664,10 +671,9 @@ class TrimCircuit (PyTango.Device_4Impl):
         if self.hasCalibData[self.Mode] == True:
             attr_IntMainFieldComponent_read = self.MainFieldComponent_r * self.Length
             attr.set_value(attr_IntMainFieldComponent_read)
-            attr.set_quality(self.IntFieldQ)
 
     def is_IntMainFieldComponent_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]  and self.hasCalibData[self.Mode] and self.get_current_and_field() and self.get_swb_mode()
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]  and self.hasCalibData[self.Mode] and self.get_current_and_field() and self.get_swb_mode() and not self.field_out_of_range
 
 
 class TrimCircuitClass(PyTango.DeviceClass):

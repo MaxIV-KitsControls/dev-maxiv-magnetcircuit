@@ -16,7 +16,7 @@ from math import sqrt, factorial
 
 _maxdim = 10 #Maximum number of multipole components
 
-def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  poltimesorient, tilt, typ, maglen, actual_current, set_current=None, is_sole=False):
+def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  poltimesorient, tilt, typ, maglen, actual_current, set_current=None, is_sole=False, find_limit=False):
 
     #print " +++++++++++ in CF +++++++++++++++ ", actual_current, set_current, is_sole
     #Calculate all field components which will include the one we already set, using actual current in PS
@@ -47,14 +47,24 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
 
         #For a quad: Given a current we get back k1 * length * BRho
         #k1 * BRho is the element of fieldB, k1 is the element of fieldB_norm
-        #print "will interp with", currentsmatrix[i], fieldsmatrix[i]
-        #print "interp ", actual_current, np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i])
+        #print "will interp with", actual_current, currentsmatrix[i], fieldsmatrix[i]
 
-        calcfield = sign * poltimesorient * np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length 
+        lower_limit_return = -99999999.9
+        upper_limit_return =  99999999.9
+        if find_limit:
+            lower_limit_return = None
+            upper_limit_return = None
+
+        calcfield = sign * poltimesorient * np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i], lower_limit_return, upper_limit_return) / length
+
         if set_current is not None:
-            setfield = sign * poltimesorient * np.interp(set_current, currentsmatrix[i], fieldsmatrix[i]) / length 
+            setfield = sign * poltimesorient * np.interp(set_current, currentsmatrix[i], fieldsmatrix[i], lower_limit_return, upper_limit_return) / length 
         else:
             setfield = np.NAN
+
+        #if we interpolated p/m 99999999 then we are outside the range of the calibration data, so do not know the field
+        if  calcfield > 99999999 or setfield > 99999999: #safe on a nan?
+            return False, None, None, None, None, None, None
 
         calcfield_norm = calcfield / brho
         setfield_norm  = setfield / brho
@@ -67,8 +77,8 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
         calcfield_norm = calcfield_norm*factorial_factor
         setfield_norm  = setfield_norm*factorial_factor
 
-        #For a dip: Given a current we get back theta * BRho
-        #NB theta (theta * BRho) is NOT the zeroth element of fieldB (fieldB normalised) but store it there anyway
+        #For a dip: Given a current we get back Theta * BRho
+        #NB Theta (Theta * BRho) is NOT the zeroth element of fieldB (fieldB normalised) but store it there anyway
         #See wiki page for details
 
         #For a sole, get back B_s directly, no scaling by brho
@@ -99,7 +109,7 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
                     thiscomponent = calcfield
                     thissetcomponent=setfield
 
-    return thiscomponent, thissetcomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
+    return True, thiscomponent, thissetcomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
 
 def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, poltimesorient, tilt, typ, length, fieldA, fieldB, is_sole=False):
     

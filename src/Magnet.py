@@ -67,6 +67,7 @@ class Magnet (PyTango.Device_4Impl):
         self.get_device_properties(self.get_device_class())
         self.PolTimesOrient = self.Orientation * self.Polarity
         self.is_sole = False #hack for solenoids until configured properly
+        self.field_out_of_range = False
 
         #get trim and main coil proxies
         self._main_circuit_device = None
@@ -81,6 +82,7 @@ class Magnet (PyTango.Device_4Impl):
         self.status_str_cir = ""
         self.status_str_trm = ""
         self.status_str_trmi = ""
+        self.status_str_b = ""
 
         #interlock config
         self.interlock_descs   = {}
@@ -242,14 +244,19 @@ class Magnet (PyTango.Device_4Impl):
                 self.debug_stream("Will read current from main circuit")
                 Current = self.main_circuit_device.currentActual
                 self.debug_stream("Will read BRho from main circuit")
-                BRho = self.main_circuit_device.BRho
+                BRho = self.main_circuit_device.BRho  
+                self.status_str_b = ""
             except (AttributeError, PyTango.DevFailed) as e:
                 self.debug_stream("Cannot get state or current from circuit device " + self.MainCoil)
                 return False            
             else:
-                (MainFieldComponent_r, MainFieldComponent_w, self.fieldA_main, self.fieldANormalised_main, self.fieldB_main, self.fieldBNormalised_main) \
+                (success, MainFieldComponent_r, MainFieldComponent_w, self.fieldA_main, self.fieldANormalised_main, self.fieldB_main, self.fieldBNormalised_main) \
                     = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length, Current, None, self.is_sole)
 
+                self.field_out_of_range = False
+                if success==False:
+                    self.status_str_b = "Cannot interpolate read current %f " % (Current)
+                    self.field_out_of_range = True
                 return True
         else:
             self.debug_stream("Cannot get proxy to main coil " + self.MainCoil)
@@ -299,7 +306,7 @@ class Magnet (PyTango.Device_4Impl):
         self.check_interlock()
 
         #set status message
-        msg = self.status_str_cfg +"\n"+ self.status_str_cir +"\n"+ self.status_str_trm +"\n" + self.status_str_ilk + "\n"+ self.status_str_trmi
+        msg = self.status_str_cfg +"\n"+ self.status_str_cir +"\n"+ self.status_str_b +"\n" + self.status_str_trm +"\n" + self.status_str_ilk + "\n"+ self.status_str_trmi
         self.set_status(os.linesep.join([s for s in msg.splitlines() if s]))
 
 
@@ -337,8 +344,7 @@ class Magnet (PyTango.Device_4Impl):
      
     def is_fieldA_allowed(self, attr):
         self.debug_stream("In is_fieldA_allowed()")
-        allowed = self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_current_and_field()
-        return allowed
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_current_and_field() and not self.field_out_of_range
 
     #
 
@@ -363,8 +369,7 @@ class Magnet (PyTango.Device_4Impl):
      
     def is_fieldANormalised_allowed(self, attr):
         self.debug_stream("In is_fieldANormalised_allowed()")
-        allowed = self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_current_and_field()
-        return allowed
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_current_and_field() and not self.field_out_of_range
 
     #
 
@@ -389,8 +394,7 @@ class Magnet (PyTango.Device_4Impl):
      
     def is_fieldB_allowed(self, attr):
         self.debug_stream("In is_fieldB_allowed()")
-        allowed = self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_current_and_field()
-        return allowed
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_current_and_field() and not self.field_out_of_range
 
     #
 
@@ -415,8 +419,7 @@ class Magnet (PyTango.Device_4Impl):
      
     def is_fieldBNormalised_allowed(self, attr):
         self.debug_stream("In is_fieldBNormalised_allowed()")
-        allowed = self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_current_and_field()
-        return allowed
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_current_and_field() and not self.field_out_of_range
 
     #
 
