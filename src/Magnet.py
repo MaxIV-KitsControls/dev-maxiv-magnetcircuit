@@ -507,7 +507,8 @@ class MagnetClass(PyTango.DeviceClass):
           PyTango.READ_WRITE],
          {
              'label': "apply trim field",
-             'unit': "T/F",
+             'unit': "T/F",        
+             'doc': "Toggles whether the magnet device adds the trim field to the field of the main circuit",
          } ],
         'fieldA':
         [[PyTango.DevFloat,
@@ -516,6 +517,7 @@ class MagnetClass(PyTango.DeviceClass):
          {
              'label': "A_n",
              'unit': "T m^1-n",
+             'doc': "field A (skew) components"
          } ],
         'fieldB':
         [[PyTango.DevFloat,
@@ -524,6 +526,7 @@ class MagnetClass(PyTango.DeviceClass):
          {
              'label': "B_n",
              'unit': "T m^1-n",
+             'doc': "field B (skew) components"
          } ],
         'fieldANormalised':
         [[PyTango.DevFloat,
@@ -532,6 +535,7 @@ class MagnetClass(PyTango.DeviceClass):
          {
              'label': "e/p A_n",
              'unit': "m^-n",
+             'doc': "field A normalised (skew) components"
          } ],
         'fieldBNormalised':
         [[PyTango.DevFloat,
@@ -540,6 +544,7 @@ class MagnetClass(PyTango.DeviceClass):
          {
              'label': "e/p B_n",
              'unit': "m^-n",
+             'doc': "field B normalised (skew) components"
          } ],
         'temperatureInterlock':
         [[PyTango.DevBoolean,
@@ -548,6 +553,7 @@ class MagnetClass(PyTango.DeviceClass):
          {
              'label': "temperature interlock",
              'unit': "T/F",
+             'doc': "indicates if a thermoswitch read by PLC is over temperature"
          } ]
     }
 

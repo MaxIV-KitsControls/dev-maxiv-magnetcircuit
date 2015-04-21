@@ -733,6 +733,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
          {
              'label': "set current",
              'unit': "A",
+             'doc': "Set current on PS (attribute write value)",
          } ],
         'currentActual':
         [[PyTango.DevFloat,
@@ -741,6 +742,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
          {
              'label': "actual current",
              'unit': "A",
+             'doc': "Read current on PS",
          } ],
         'fieldA':
         [[PyTango.DevFloat,
@@ -749,14 +751,16 @@ class MagnetCircuitClass(PyTango.DeviceClass):
          {
              'label': "A_n",
              'unit': "T m^1-n",
+             'doc': "field A (skew) components"
          } ],
         'fieldB':
         [[PyTango.DevFloat,
           PyTango.SPECTRUM,
           PyTango.READ, 10],
          {
-            'label': "B_n",
-            'unit': "T m^1-n",
+             'label': "B_n",
+             'unit': "T m^1-n",
+             'doc': "field B (normal) components"
          } ],
         'fieldANormalised':
         [[PyTango.DevFloat,
@@ -765,6 +769,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
         {
             'label': "e/p A_n",
             'unit': "m^-n",
+             'doc': "field A normalised (skew) components"
          } ],
         'fieldBNormalised':
         [[PyTango.DevFloat,
@@ -773,6 +778,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
          {
              'label': "e/p B_n",
              'unit': "m^-n",
+             'doc': "field B normalised (skew) components"
         } ],
         'energy':
         [[PyTango.DevFloat,
@@ -782,6 +788,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
              'label': "electron energy",
              'unit': "eV",
              'format': "%6.2e",
+             'doc': "electron energy"
          } ],
         'fixNormFieldOnEnergyChange':
         [[PyTango.DevBoolean,
@@ -790,6 +797,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
          {
              'label': "Preserve norm. field",
              'unit': "T/F",
+             'doc': "If true, if the energy changes the current is recalculated in order to preserve the normalised field"
          } ],
         'BRho':
         [[PyTango.DevFloat,
@@ -798,6 +806,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
          {
              'label': "b.rho",
              'unit': "eV s m^1",
+             'doc': "b.rho normalistion factor"
          } ],
         'CyclingStatus':
         [[PyTango.DevString,
@@ -805,6 +814,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
           PyTango.READ],
          {
              'label': "Cycling Status",
+             'doc': "status of cycling procedure"
          } ],
         'CyclingState':
         [[PyTango.DevBoolean,
@@ -812,6 +822,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
           PyTango.READ],
          {
              'label': "Cycling State",
+             'doc': "state of cycling procedure"
          } ],
         'MainFieldComponent':
         [[PyTango.DevDouble,

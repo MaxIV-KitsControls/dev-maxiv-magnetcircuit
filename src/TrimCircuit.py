@@ -741,6 +741,7 @@ class TrimCircuitClass(PyTango.DeviceClass):
           PyTango.READ],
          {
              'label': "SWB mode",
+             'doc': "Mode as set in the SWB device. Can be: SEXTUPOLE, NORMAL_QUADRUPOLE, SKEW_QUADRUPOLE, X_CORRECTOR, Y_CORRECTOR"
          } ],
         'currentSet':
         [[PyTango.DevFloat,
@@ -748,7 +749,8 @@ class TrimCircuitClass(PyTango.DeviceClass):
           PyTango.READ],
          {
              'label': "set current",
-             'unit': "A",
+             'unit': "A", 
+             'doc': "Set current on PS (attribute write value)",
          } ],
         'currentActual':
         [[PyTango.DevFloat,
@@ -756,7 +758,8 @@ class TrimCircuitClass(PyTango.DeviceClass):
           PyTango.READ],
          {
              'label': "actual current",
-             'unit': "A",
+             'unit': "A",  
+             'doc': "Read current on PS",
          } ],
         'fieldA':
         [[PyTango.DevFloat,
@@ -765,6 +768,7 @@ class TrimCircuitClass(PyTango.DeviceClass):
          {
              'label': "A_n",
              'unit': "T m^1-n",
+             'doc': "field A (skew) components"
          } ],
         'fieldB':
         [[PyTango.DevFloat,
@@ -773,6 +777,7 @@ class TrimCircuitClass(PyTango.DeviceClass):
          {
             'label': "B_n",
             'unit': "T m^1-n",
+             'doc': "field B (skew) components"
          } ],
         'fieldANormalised':
         [[PyTango.DevFloat,
@@ -781,6 +786,7 @@ class TrimCircuitClass(PyTango.DeviceClass):
         {
             'label': "e/p A_n",
             'unit': "m^-n",
+            'doc': "field A normalised (skew) components"
          } ],
         'fieldBNormalised':
         [[PyTango.DevFloat,
@@ -789,6 +795,7 @@ class TrimCircuitClass(PyTango.DeviceClass):
          {
              'label': "e/p B_n",
              'unit': "m^-n",
+            'doc': "field B normalised (skew) components"
         } ],
         'energy':
         [[PyTango.DevFloat,
@@ -798,6 +805,7 @@ class TrimCircuitClass(PyTango.DeviceClass):
              'label': "electron energy",
              'unit': "eV",
              'format': "%6.2e",
+             'doc': "electron energy"
          } ],
         'fixNormFieldOnEnergyChange':
         [[PyTango.DevBoolean,
@@ -806,6 +814,7 @@ class TrimCircuitClass(PyTango.DeviceClass):
          {
              'label': "Preserve norm. field on energy change",
              'unit': "T/F",
+             'doc': "If true, if the energy changes the current is recalculated in order to preserve the normalised field"
          } ],
         'BRho':
         [[PyTango.DevFloat,
@@ -814,6 +823,7 @@ class TrimCircuitClass(PyTango.DeviceClass):
          {
              'label': "b.rho",
              'unit': "eV s m^1",
+             'doc': "b.rho normalistion factor"
          } ],
         'MainFieldComponent':
         [[PyTango.DevDouble,

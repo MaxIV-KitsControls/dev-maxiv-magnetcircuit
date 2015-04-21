@@ -97,3 +97,6 @@
 	* Fill first element of field vector for correctors (unlike dipoles)
 	* Do not allow to interpolate a field beyond the max current
 	* v1.4.1
+
+21-04-2015 Paul Bell
+	* Add all attribe doc strings
