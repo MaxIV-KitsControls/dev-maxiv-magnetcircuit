@@ -517,7 +517,8 @@ class MagnetClass(PyTango.DeviceClass):
          {
              'label': "A_n",
              'unit': "T m^1-n",
-             'doc': "field A (skew) components"
+             'doc': "field A (skew) components",
+             'format': "%6.5e"
          } ],
         'fieldB':
         [[PyTango.DevFloat,
@@ -526,7 +527,8 @@ class MagnetClass(PyTango.DeviceClass):
          {
              'label': "B_n",
              'unit': "T m^1-n",
-             'doc': "field B (skew) components"
+             'doc': "field B (skew) components",             
+             'format': "%6.5e"
          } ],
         'fieldANormalised':
         [[PyTango.DevFloat,
@@ -535,7 +537,8 @@ class MagnetClass(PyTango.DeviceClass):
          {
              'label': "e/p A_n",
              'unit': "m^-n",
-             'doc': "field A normalised (skew) components"
+             'doc': "field A normalised (skew) components",
+             'format': "%6.5e"
          } ],
         'fieldBNormalised':
         [[PyTango.DevFloat,
@@ -544,7 +547,8 @@ class MagnetClass(PyTango.DeviceClass):
          {
              'label': "e/p B_n",
              'unit': "m^-n",
-             'doc': "field B normalised (skew) components"
+             'doc': "field B normalised (skew) components",
+             'format': "%6.5e"
          } ],
         'temperatureInterlock':
         [[PyTango.DevBoolean,
