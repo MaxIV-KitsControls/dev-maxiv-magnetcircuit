@@ -158,7 +158,7 @@ class TrimCircuit (PyTango.Device_4Impl):
     #
     def calculate_brho(self):
         #Bρ = sqrt(T(T+2M0)/(qc0) where M0 = rest mass of the electron in MeV, q = 1 and c0 = speed of light Mm/s (mega m!) Energy is in eV to start.
-        self.BRho = sqrt( self.energy_r/1000000.0 * (self.energy_r/1000000.0 + (2 * 0.000510998910) ) ) / (299.792458)
+        self.BRho = sqrt( self.energy_r/1000000.0 * (self.energy_r/1000000.0 + (2 * 0.510998910) ) ) / (299.792458)
 
     ###############################################################################
     #

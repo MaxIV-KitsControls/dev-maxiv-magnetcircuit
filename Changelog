@@ -102,3 +102,9 @@
 	* Add all attribe doc strings
 	* Set attribute formatting
 	* v1.4.2
+
+23-04-2015 Paul Bell	
+	* Fix electron energy factor 1000 error!
+	* Remove factorial factor in interpolation
+	* Set multipoles for which calibration data == 0 to Nan
+	* v1.4.3

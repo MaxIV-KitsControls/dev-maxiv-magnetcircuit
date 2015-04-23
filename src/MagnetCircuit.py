@@ -152,7 +152,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
     #
     def calculate_brho(self):
         #Bρ = sqrt(T(T+2M0)/(qc0) where M0 = rest mass of the electron in MeV, q = 1 and c0 = speed of light Mm/s (mega m!) Energy is in eV to start.
-        self.BRho = sqrt( self.energy_r/1000000.0 * (self.energy_r/1000000.0 + (2 * 0.000510998910) ) ) / (299.792458)
+        self.BRho = sqrt( self.energy_r/1000000.0 * (self.energy_r/1000000.0 + (2 * 0.510998910) ) ) / (299.792458)
 
     ###############################################################################
     #
@@ -582,13 +582,17 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 self.set_ps_current()
             else:
                 self.debug_stream("Energy changed: will recalculate fields for the PS current")
+
                 (success, self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
                     = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.actual_current, self.set_current, is_sole=self.is_sole)
 
 
     def is_energy_allowed(self, attr):
-        return self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
-
+        #if writing then we need to know currents etc
+        if attr == "READ_REQ":
+            return self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        else:
+            return self.get_current_and_field() and self.hasCalibData and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and not self.field_out_of_range
     #
 
     def read_fixNormFieldOnEnergyChange(self, attr):
