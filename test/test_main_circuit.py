@@ -181,13 +181,17 @@ class MagnetCircuitTestCase(DeviceTestCase):
         self.assertEqual(self.device.MainFieldComponent, self.ps_proxy.read_attribute("Current").value)
 
     #Test 7 - for a sext (2 factorial factor for sext and factor -1)
-    def test_k2_two_when_current_one(self):
+    #Recall - different for linac and ring in terms of the factorial factor
+    def test_k2_one_when_current_one(self):
 	print "Test 1.7"
 	#have to set current on ps
 	self.ps_proxy.read_attribute("Current").value = 1.0
 	self.ps_proxy.read_attribute("Current").w_value = 1.0
+        self.device.Energy = 3e8 #this will give a BRho factor of about 1
+        print "MFC ", self.device.MainFieldComponent
 	field = -1.0 * self.device.MainFieldComponent
-	self.assertTrue(field-0.01 < 2.0 < field+0.01)
+        print field
+	self.assertTrue(field-0.01 < 1.0 < field+0.01)
 
     #Test 8 - for a kquad
     def test_k1_one_when_current_one(self):
@@ -201,9 +205,11 @@ class MagnetCircuitTestCase(DeviceTestCase):
         self.magnet_proxies["SECTION/MAG/MAG-02"].Type = ["kquad"]  
         print "set kquads"
         self.device.Init() 
-
+        self.device.Energy = 3e8 #this will give a BRho factor of about 1
+        print "MFC ", self.device.MainFieldComponent
         print self.device.Status()
         field = -1.0 * self.device.MainFieldComponent
+        print field
     	self.assertTrue(field-0.01 < 1.0 < field+0.01)
 
 

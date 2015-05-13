@@ -108,3 +108,8 @@
 	* Remove factorial factor in interpolation
 	* Set multipoles for which calibration data == 0 to Nan
 	* v1.4.3
+
+13-05-2015 Paul Bell	
+	* Fix conversion to theta for kickers
+	* Deal with calibration data for pole face strips (already pos and neg current range)
+	* v1.4.4

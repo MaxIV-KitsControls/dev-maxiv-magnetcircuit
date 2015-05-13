@@ -67,7 +67,7 @@ class TrimCircuit (PyTango.Device_4Impl):
         self.get_device_properties(self.get_device_class())
 
         #energy attribute eventually to be set by higher level device?
-        self.energy_r = 300000000.0 #=100 MeV for testing, needs to be read from somewhere
+        self.energy_r = 3000000000.0 #=100 MeV for testing, needs to be read from somewhere
         self.energy_w = None
         self.calculate_brho() #a conversion factor that depends on energy
 
@@ -337,16 +337,19 @@ class TrimCircuit (PyTango.Device_4Impl):
                 self.debug_stream("Cannot read current on PS " + self.PowerSupplyProxy)
                 return False
             else:  
+                self.field_out_of_range = False
                 if self.hasCalibData[self.Mode]:
                     #calculate the actual and set fields
                     (success, self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
                         = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.actual_current, self.set_current, is_sole=False)
-
-                self.field_out_of_range = False
-                if success==False:
-                    self.status_str_b = "Cannot interpolate read/set currents %f/%f " % (self.actual_current,self.set_current)
+                    if success==False:
+                        self.status_str_b = "Cannot interpolate read/set currents %f/%f " % (self.actual_current,self.set_current)
+                        self.field_out_of_range = True
+                    return True
+                else: #if not calib data, can read current but not field
+                    self.status_str_b = "Circuit device may only read current"
                     self.field_out_of_range = True
-                return True
+                    return True
 
         else:
             self.debug_stream("Cannot get proxy to PS " + self.PowerSupplyProxy)
@@ -483,7 +486,7 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def is_mode_allowed(self, attr):
         self.debug_stream("In is_mode_allowed()")
-        return self.get_swb_mode() and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode()
 
     #
 
@@ -493,7 +496,7 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def is_currentCalculated_allowed(self, attr):
         self.debug_stream("In is_currentCalculated_allowed()")
-        return self.get_current_and_field() and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]  
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_current_and_field()
        
     #
 
@@ -503,7 +506,7 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def is_currentActual_allowed(self, attr):
         self.debug_stream("In is_currentActual_allowed()")
-        return self.get_current_and_field() and self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_current_and_field()
 
     #
 
@@ -521,7 +524,7 @@ class TrimCircuit (PyTango.Device_4Impl):
     def is_fieldA_allowed(self, attr):
         self.debug_stream("In read_fieldA_allowed()")
         #note order here: get the mode before evaluating the field!
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.hasCalibData[self.Mode] and self.get_current_and_field() and not self.field_out_of_range
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_swb_mode() and self.get_current_and_field() and not self.field_out_of_range
 
     #
 
@@ -837,14 +840,14 @@ class TrimCircuitClass(PyTango.DeviceClass):
           PyTango.SCALAR,
           PyTango.READ_WRITE],
          {
-             'format': "%6.5e"
+             'format': "%6.6f"
          } ],
         'IntMainFieldComponent':
         [[PyTango.DevDouble,
           PyTango.SCALAR,
           PyTango.READ],
          {
-             'format': "%6.5e"
+             'format': "%6.6f"
          } ]
     }
 

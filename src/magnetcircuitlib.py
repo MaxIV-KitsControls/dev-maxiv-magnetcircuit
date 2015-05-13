@@ -40,7 +40,9 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
         #if data is all zeroes, can also skip
         #print i, currentsmatrix[i]
         #print "check zeros ", np.count_nonzero(currentsmatrix[i])
-        if np.count_nonzero(currentsmatrix[i]) == 0:
+        #if np.count_nonzero(currentsmatrix[i]) == 0: #not in old version of numpy!
+        if np.all(currentsmatrix[i]==0):
+            #print "found zeroes"
             continue
         
         #NB: i=0 for dipoles, 1 for quad, 2 for sext
@@ -107,8 +109,8 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
                     thissetcomponent=setfield
                 #hack for theta (zeroth component) should not be divided by length
                 if  i==0:
-                    thiscomponent = calcfield * length
-                    thissetcomponent = setfield * length
+                    thiscomponent = calcfield_norm * length
+                    thissetcomponent = setfield_norm * length
         else:
             fieldA[i] = calcfield 
             fieldANormalised[i] = calcfield_norm 
@@ -123,8 +125,8 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
                     thissetcomponent=setfield
                 #hack for theta (zeroth component) should not be divided by length
                 if  i==0:
-                    thiscomponent = calcfield * length
-                    thissetcomponent = setfield * length
+                    thiscomponent = calcfield_norm * length
+                    thissetcomponent = setfield_norm * length
 
     return True, thiscomponent, thissetcomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
 
