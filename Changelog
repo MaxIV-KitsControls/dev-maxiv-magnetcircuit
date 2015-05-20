@@ -113,3 +113,7 @@
 	* Fix conversion to theta for kickers
 	* Deal with calibration data for pole face strips (already pos and neg current range)
 	* v1.4.4
+
+20-05-2015 Paul Bell
+	* RT6746 fix sign for vertical correctors
+	* v1.4.5

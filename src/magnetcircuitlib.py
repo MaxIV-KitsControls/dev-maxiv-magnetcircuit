@@ -17,7 +17,7 @@ from math import sqrt, factorial
 
 _maxdim = 10 #Maximum number of multipole components
 
-def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  poltimesorient, tilt, typ, maglen, actual_current, set_current=None, is_sole=False, find_limit=False):
+def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  poltimesorient, tilt, typ, length, actual_current, set_current=None, is_sole=False, find_limit=False):
 
     #print " +++++++++++ in CF +++++++++++++++ ", actual_current, set_current, is_sole
     #Calculate all field components which will include the one we already set, using actual current in PS
@@ -32,38 +32,32 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
     #We set all the field components, not just the allowed one:
     for i in range (0,_maxdim):
 
-        #only need to set field elements up to multipole for which we have data
-        #calib data above are all Nan
+        #Only need to set field elements up to multipole for which we have data.
+        #Calib data above are all Nan
         if np.isnan(currentsmatrix[i]).any():
             break
 
-        #if data is all zeroes, can also skip
-        #print i, currentsmatrix[i]
-        #print "check zeros ", np.count_nonzero(currentsmatrix[i])
+        #If data is all zeroes, can also skip
         #if np.count_nonzero(currentsmatrix[i]) == 0: #not in old version of numpy!
         if np.all(currentsmatrix[i]==0):
             #print "found zeroes"
             continue
         
-        #NB: i=0 for dipoles, 1 for quad, 2 for sext
-        #There is an extra sign, 1 for dipoles, -1 for quads and sext
-        #for dipoles and solenoids do not integrate by length
+        #NB: i=0 for dipoles and correctors, 1 for quad, 2 for sext
+        #There is an extra sign -1 for quads and sext (i.e. when i is not 0)
+        #Vertical correctors (i=0) also get sign -1
         sign = -1
-        length = maglen
-        if i == 0:
+        if i == 0 and typ not in ["vkick","Y_CORRECTOR"]:
             sign =  1
-            #length = 1.0
 
         #For a quad: Given a current we get back k1 * length * BRho
         #k1 * BRho is the element of fieldB, k1 is the element of fieldB_norm
-        #print "will interp with", actual_current, currentsmatrix[i], fieldsmatrix[i]
 
-        #if we are finding limit of field, report the limit of the interpolation data
-        #if not, and current is beyond interpolation data, return an error
+        #If we are finding limit of field, report the limit of the interpolation data
+        #If not, and current is beyond interpolation data, return an error
         if not find_limit: 
-            #print "check ", set_current, actual_current, currentsmatrix[i][0], currentsmatrix[i][-1]
             if actual_current < currentsmatrix[i][0] or actual_current > currentsmatrix[i][-1]:
-                print "read current out of bounds", actual_current,  currentsmatrix[i][0], currentsmatrix[i][-1]
+                #print "read current out of bounds", actual_current,  currentsmatrix[i][0], currentsmatrix[i][-1]
                 return False, None, None, None, None, None, None
             if set_current is not None:
                 if set_current < currentsmatrix[i][0] or set_current > currentsmatrix[i][-1]:
@@ -91,10 +85,8 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
         #For a dip: Given a current we get back Theta * BRho
         #NB Theta (Theta * BRho) is NOT the zeroth element of fieldB (fieldB normalised) but store it there anyway
         #See wiki page for details
+        #For a solenoid, get back B_s directly, no scaling by BRho
 
-        #For a sole, get back B_s directly, no scaling by brho
-
-        #print i, calcfield
         if tilt == 0 and typ not in ["vkick","SKEW_QUADRUPOLE","Y_CORRECTOR"]:
             fieldB[i] = calcfield
             fieldBNormalised[i] = calcfield_norm
@@ -132,21 +124,16 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
 
 def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, poltimesorient, tilt, typ, length, fieldA, fieldB, is_sole=False):
     
-
-    #print " +++++++++++ in CF +++++++++++++++ ", fieldB, is_sole
     #For quad: given k1 * length * BRho (call it intBtimesBRho) we get a current
     #For sext: given k2 * length/2.0 * BRho (call it intBtimesBRho) we get a current
-    #for dip   given theta *  BRho (call it intBtimesBRho) we get a current
-    #For sole, given bs we get a current
+    #For dip:  given theta *  BRho (call it intBtimesBRho) we get a current
+    #For sole: given bs we get a current
 
-    #For quad: k1 * BRho is the element of fieldB
-
-    #There is an extra sign, 1 for dipoles, -1 for quads and sext
+    #There is an extra sign -1 for quads and sext (i.e. when i is not 0)
+    #Vertical correctors (i=0) also get sign -1
     sign = -1
-    #in addition, for dipoles and solenoids do not integrate by length
-    if allowed_component == 0:
+    if allowed_component == 0 and typ not in ["vkick","Y_CORRECTOR"]:
         sign =  1
-        #length = 1.0
 
     if tilt == 0 and typ not in ["vkick","SKEW_QUADRUPOLE","Y_CORRECTOR"]:
         intBtimesBRho = fieldB[allowed_component]*length * poltimesorient * sign
@@ -161,7 +148,7 @@ def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, pol
     if is_sole:
         intBtimesBRho = intBtimesBRho / brho
 
-    #n! factor
+    #n! factor for linac only!?
     ##factorial_factor = factorial(allowed_component)
     ##intBtimesBRho  = intBtimesBRho/factorial_factor
 
