@@ -119,7 +119,7 @@ class TrimCircuit (PyTango.Device_4Impl):
 
         #need to know which type of trim circuit this is (SXDE, OXY, etc)
         #The device names contains the type, e.g R3-301M1/MAG/CRTOXX-01
-        trim_type = self.get_name().split("/")[-1].split("-")[0][-3:]
+        trim_type = self.get_name().split("/")[-1].split("-")[0]
 
         #normal quadrupole
         typearg="NORMAL_QUADRUPOLE"
@@ -142,7 +142,7 @@ class TrimCircuit (PyTango.Device_4Impl):
         (self.hasCalibData[typearg], self.status_str_cal[typearg],  self.fieldsmatrix[typearg],  self.currentsmatrix[typearg]) \
             = process_calibration_data(self.TrimExcitationCurveCurrents_y_corrector,self.TrimExcitationCurveFields_y_corrector, 0)
 
-        #only octupole types have sextupole modes:
+        #only sextupole types have sextupole modes:
         if "SX" in trim_type:
             typearg="SEXTUPOLE"
             (self.hasCalibData[typearg], self.status_str_cal[typearg],  self.fieldsmatrix[typearg],  self.currentsmatrix[typearg]) \

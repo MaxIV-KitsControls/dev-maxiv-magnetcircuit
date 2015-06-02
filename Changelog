@@ -117,3 +117,7 @@
 20-05-2015 Paul Bell
 	* RT6746 fix sign for vertical correctors
 	* v1.4.5
+
+02-06-2015 Paul Bell
+	* Fix for SEXTUPOLE mode trim coils
+	* v1.4.6
