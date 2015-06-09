@@ -78,7 +78,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
     def init_device(self):
         self.debug_stream("In init_device()")
-        self.set_state(PyTango.DevState.INIT)
 
         self.get_device_properties(self.get_device_class())
 
@@ -124,7 +123,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.Tilt = 0
         self.Length = 0
         self.Type = ""
-        self.read_magnet_properties() #this is reading properties from the magnet, not the circuit!
+        self.hasCalibData = False
+        magnet_properties_ok = self.read_magnet_properties() #this is reading properties from the magnet, not the circuit!
         #
         #The magnet type determines the allowed field component to be controlled.
         #Note that in the multipole expansion we have:
@@ -134,8 +134,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.config_type()
 
         #process the calibration data into useful numpy arrays 
-        (self.hasCalibData, self.status_str_cal,  self.fieldsmatrix,  self.currentsmatrix) \
-            = process_calibration_data(self.ExcitationCurveCurrents,self.ExcitationCurveFields, self.allowed_component)
+        if magnet_properties_ok:
+            (self.hasCalibData, self.status_str_cal,  self.fieldsmatrix,  self.currentsmatrix) \
+                = process_calibration_data(self.ExcitationCurveCurrents,self.ExcitationCurveFields, self.allowed_component)
 
         #set limits on current
         self.set_current_limits()
@@ -163,7 +164,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
                 self._ps_device = PyTango.DeviceProxy(self.PowerSupplyProxy)
             except (PyTango.DevFailed, PyTango.ConnectionFailed) as df:
                 self.debug_stream("Failed to get power supply proxy\n" + df[0].desc)
-                self.set_state(PyTango.DevState.FAULT)
         return self._ps_device
 
     ##############################################################################################################
@@ -199,14 +199,14 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
 
 
-        # If there were any issues go to FAULT
+        # If there were any issues report in status but do not go to FAULT as device echoes PS state
         if problematic_devices:
-            self.status_str_prop = 'Problems with properties of magnet device(s): %s. Fix and do INIT' % ", ".join(problematic_devices)
+            self.status_str_prop = 'Problems with properties of magnet device(s). Fix and do INIT.'
             self.debug_stream(self.status_str_prop)
-            self.set_state( PyTango.DevState.FAULT )
+            return False
         else:
             self.debug_stream("Magnet length/type/tilt :  %f/%s/%d " % (self.Length, self.Type, self.Tilt))
-
+            return True
 
     ##############################################################################################################
     #
@@ -272,7 +272,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
         else:
             self.status_str_cfg = 'Magnet type invalid %s' % self.Type
             self.debug_stream(self.status_str_cfg)
-            self.set_state( PyTango.DevState.FAULT )
             return
 
         att_vc.set_properties(multi_prop_vc)
@@ -347,7 +346,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 4)
         else:
             self.status_str_cyc = "Setup cycling: cannot get proxy to %s " % self.PowerSupplyProxy 
-            self.set_state(PyTango.DevState.FAULT)
 
     ##############################################################################################################
     #
@@ -409,6 +407,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
     ##############################################################################################################
     #
     def dev_state(self):
+        self.debug_stream("In dev_state()")
 
         #Check state of PS
         ps_state = self.get_ps_state()
@@ -445,6 +444,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
         
     def dev_status(self):
 
+        self.debug_stream("In dev_status()")
+
         #need to check cycling status
         self.check_cycling_status()
 
@@ -477,7 +478,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
         try:
             self.ps_device.write_attribute("Current", self.set_current)
         except PyTango.DevFailed as e:
-            self.set_state(PyTango.DevState.ALARM)
             self.status_str_ps = "Cannot set current on PS" + self.PowerSupplyProxy
 
 
@@ -490,7 +490,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         attr.set_value(self.set_current)
 
     def is_currentSet_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_current_and_field() 
+        return self.get_current_and_field() 
 
     #
 
@@ -499,7 +499,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         attr.set_value(self.actual_current)
 
     def is_currentActual_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_current_and_field() 
+        return self.get_current_and_field() 
 
     #
 
@@ -511,7 +511,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
             attr.set_value(self.fieldA)
 
     def is_fieldA_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_current_and_field() and not self.field_out_of_range
+        print "is FAA", self.get_state() 
+        return self.get_current_and_field() and not self.field_out_of_range
 
     #
 
@@ -523,7 +524,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             attr.set_value(self.fieldB)
 
     def is_fieldB_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_current_and_field() and not self.field_out_of_range
+        return self.get_current_and_field() and not self.field_out_of_range
 
     #
 
@@ -535,7 +536,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             attr.set_value(self.fieldANormalised)
 
     def is_fieldANormalised_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_current_and_field() and not self.field_out_of_range
+        return self.get_current_and_field() and not self.field_out_of_range
 
     #
 
@@ -547,7 +548,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             attr.set_value(self.fieldBNormalised)
 
     def is_fieldBNormalised_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_current_and_field() and not self.field_out_of_range
+        return self.get_current_and_field() and not self.field_out_of_range
 
     #
 
@@ -593,9 +594,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
     def is_energy_allowed(self, attr):
         #if writing then we need to know currents etc
         if attr == PyTango.AttReqType.READ_REQ:
-            return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]
+            return True
         else:
-            return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_current_and_field() and not self.field_out_of_range
+            return self.get_current_and_field() and not self.field_out_of_range
     #
 
     def read_fixNormFieldOnEnergyChange(self, attr):
@@ -638,7 +639,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             self.set_ps_current()
 
     def is_MainFieldComponent_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_current_and_field() and not self.field_out_of_range
+        return self.get_current_and_field() and not self.field_out_of_range
 
     #
 
@@ -650,7 +651,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
             attr.set_quality(self.IntFieldQ)
 
     def is_IntMainFieldComponent_allowed(self, attr):
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.get_current_and_field() and not self.field_out_of_range
+        return self.get_current_and_field() and not self.field_out_of_range
 
     #
 

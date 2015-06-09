@@ -135,9 +135,8 @@ class TrimCircuitTestCase(DeviceTestCase):
 
         cls.magnet_proxies = dict((devname, make_magnet_proxy(devname))
                                   for devname in cls.properties["MagnetProxies"])
-        cls.swb_proxy = make_swb_proxy()
         cls.ps_proxy = make_ps_proxy()
-
+        cls.swb_proxy = make_swb_proxy()
 
         def proxy_result(devname):
             if devname in cls.magnets:
@@ -150,66 +149,52 @@ class TrimCircuitTestCase(DeviceTestCase):
         cls.device_proxy = TrimCircuit.PyTango.DeviceProxy = MagicMock(side_effect=proxy_result)
 
     #Test 1
-    def test_trim_state_on_when_ps_and_swb_on(self):
-        print "Test 2.1"
-        self.ps_proxy.State.return_value = PyTango.DevState.ON   #because state called as function
-        self.swb_proxy.State.return_value = PyTango.DevState.ON
-        #self.swb_proxy.Mode = "SKEW QUADRUPOLE"  
-        #self.device.Init() #if wish to change, since Mode set in init
-        #print self.device.Status()
-        self.assertEqual(self.device.State(), PyTango.DevState.ON)
+    #def test_trim_state_on_when_ps_and_swb_on(self):
+    #    print "Test 1.1"
+    #    self.ps_proxy.State.return_value = PyTango.DevState.ON
+    #    self.assertEqual(self.device.State(), PyTango.DevState.ON)
 
     #Test 2
-    def test_trim_state_fault_when_ps_is_down(self):
-        print "Test 2.2"
-        self.ps_proxy.State.side_effect = PyTango.DevFailed
-        self.assertEqual(self.device.State(), PyTango.DevState.FAULT)
+    #def test_trim_state_fault_when_ps_is_fault(self):
+    #    print "Test 1.2"
+    #    self.ps_proxy.State.return_value = PyTango.DevState.FAULT
+    #    self.assertEqual(self.device.State(), PyTango.DevState.FAULT)
+
+    #Test 2.5
+    #def test_trim_state_fault_when_swb_is_fault(self):
+    #    print "Test 1.25"
+    #   self.swb_proxy.State.return_value = PyTango.DevState.FAULT
+    #   self.assertEqual(self.device.State(), PyTango.DevState.FAULT)
 
     #Test 3
-    def test_trim_state_fault_when_swb_is_down(self):
-        print "Test 2.3"
-        self.swb_proxy.State.side_effect = PyTango.DevFailed
-        self.assertEqual(self.device.State(), PyTango.DevState.FAULT)
-   
+    #def test_trim_state_fault_when_ps_is_down(self):
+    #    print "Test 4"
+    #    self.ps_proxy.State.side_effect = PyTango.DevFailed
+    #   self.assertEqual(self.device.State(), PyTango.DevState.FAULT)
+
+    #Test 3.5
+    #def test_trim_state_fault_when_swb_is_down(self):
+    #    print "Test 3.5"
+    #    self.swb_proxy.State.side_effect = PyTango.DevFailed
+    #    self.assertEqual(self.device.State(), PyTango.DevState.FAULT)
+
     #Test 4
-    def test_k_zero_when_current_zero(self):
-        print "Test 2.4"
-        #have to set current on ps
-        self.ps_proxy.read_attribute("Current").value = 0.0
-        self.ps_proxy.read_attribute("Current").w_value = 0.0
-        self.assertEqual(self.device.MainFieldComponent, self.ps_proxy.read_attribute("Current").value)
+    #def test_status_shows_calibration_ok(self):
+    #    print "Test 4"
+    #    #print self.device.Status()
+    #    self.assertIn("Calibration available", self.device.Status())
 
-    #Test 5 - quad mode
-    def test_k1_three_when_current_one(self):
-        print "Test 2.5"
+    #Test 5 
+    #def test_mode_is_normal_quadrupole(self):
+    #    print "Test 5"
+    #    print self.device.Mode
+    #    self.assertEqual("NORMAL_QUADRUPOLE", self.device.Mode)
 
-    	#have to set current on ps
-    	self.ps_proxy.read_attribute("Current").value = 1.0
-    	self.ps_proxy.read_attribute("Current").w_value = 1.0
-
-        #set mode to sext
-        self.swb_proxy.Mode = "NORMAL_QUADRUPOLE"  
-        self.device.Init() 
-
-        #print self.device.Status()
-        field = -1.0 * self.device.MainFieldComponent
-        #print "quad field is ", field
-	self.assertTrue(field-0.01 < 3.0 < field+0.01)
-
-    #Test 6 - corrector mode
-    def test_k0_two_when_current_one(self):
-        print "Test 2.6"
-
-    	#have to set current on ps
-    	self.ps_proxy.read_attribute("Current").value = 1.0
-    	self.ps_proxy.read_attribute("Current").w_value = 1.0
-
-        #set mode to sext
-        self.swb_proxy.Mode = "X_CORRECTOR"  
-        self.device.Init() 
-
-        #print self.device.Status()
-       	field = self.device.MainFieldComponent
-        #print "corr field is ", field
-	self.assertTrue(field-0.01 < 2.0 < field+0.01)
-
+    #Test 6 
+    def test_invalid_mode(self):
+        print "Test 6" 
+        self.swb_proxy.Mode = "HECTOQUADRUPOLE"
+        #need to actually read the mode
+        self.device.Mode
+        #print "2", self.device.Status()
+        self.assertIn("SWB Mode is invalid", self.device.Status())

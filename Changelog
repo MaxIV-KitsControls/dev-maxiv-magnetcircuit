@@ -121,3 +121,7 @@
 02-06-2015 Paul Bell
 	* Fix for SEXTUPOLE mode trim coils
 	* v1.4.6
+
+09-06-2015 Paul Bell
+	* Add more tests, rework state handling in circuit devices
+	* v1.5.0
