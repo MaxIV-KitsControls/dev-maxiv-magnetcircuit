@@ -46,9 +46,9 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
         #NB: i=0 for dipoles and correctors, 1 for quad, 2 for sext
         #There is an extra sign -1 for quads and sext (i.e. when i is not 0)
         #Vertical correctors (i=0) also get sign -1
-        sign = -1
-        if i == 0 and typ not in ["vkick","Y_CORRECTOR"]:
-            sign =  1
+        #sign = -1
+        #if  allowed_component == 0 and typ not in ["vkick","Y_CORRECTOR"]:
+        #    sign =  1
 
         #For a quad: Given a current we get back k1 * length * BRho
         #k1 * BRho is the element of fieldB, k1 is the element of fieldB_norm
@@ -64,10 +64,10 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
                     print "set current out of bounds"
                     return False, None, None, None, None, None, None
 
-        calcfield = sign * poltimesorient * np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length
+        calcfield = poltimesorient * np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length
 
         if set_current is not None:
-            setfield = sign * poltimesorient * np.interp(set_current, currentsmatrix[i], fieldsmatrix[i]) / length 
+            setfield = poltimesorient * np.interp(set_current, currentsmatrix[i], fieldsmatrix[i]) / length 
         else:
             setfield = np.NAN
 
@@ -120,7 +120,11 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
                     thiscomponent = calcfield_norm * length
                     thissetcomponent = setfield_norm * length
 
-    return True, thiscomponent, thissetcomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
+    sign = -1
+    if  allowed_component == 0 and typ not in ["vkick","Y_CORRECTOR"]:
+        sign =  1
+    #print "return ", typ, sign
+    return True, sign*thiscomponent, sign*thissetcomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
 
 def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, poltimesorient, tilt, typ, length, fieldA, fieldB, is_sole=False):
     
@@ -131,14 +135,14 @@ def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, pol
 
     #There is an extra sign -1 for quads and sext (i.e. when i is not 0)
     #Vertical correctors (i=0) also get sign -1
-    sign = -1
-    if allowed_component == 0 and typ not in ["vkick","Y_CORRECTOR"]:
-        sign =  1
+    #sign = -1
+    #if allowed_component == 0 and typ not in ["vkick","Y_CORRECTOR"]:
+    #    sign =  1
 
     if tilt == 0 and typ not in ["vkick","SKEW_QUADRUPOLE","Y_CORRECTOR"]:
-        intBtimesBRho = fieldB[allowed_component]*length * poltimesorient * sign
+        intBtimesBRho = fieldB[allowed_component]*length * poltimesorient #* sign
     else:
-        intBtimesBRho = fieldA[allowed_component]*length * poltimesorient * sign
+        intBtimesBRho = fieldA[allowed_component]*length * poltimesorient #* sign
 
     #hack since for theta should not multiply by length
     if allowed_component == 0:

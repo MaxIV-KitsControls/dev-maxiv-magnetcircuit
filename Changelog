@@ -125,3 +125,7 @@
 09-06-2015 Paul Bell
 	* Add more tests, rework state handling in circuit devices
 	* v1.5.0
+
+18-06-2015 Paul Bell
+	* Fix sign of field values
+	* v1.5.1

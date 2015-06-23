@@ -239,13 +239,13 @@ class TrimCircuit (PyTango.Device_4Impl):
             multi_prop_ivc.unit  = "rad m"
             multi_prop_ivc.label = "length integrated theta"
         else:
-            self.status_str_cfg = 'YYY Mode type invalid: %s' % self.Mode
+            self.status_str_cfg = 'Mode type invalid: %s' % self.Mode
             self.debug_stream(self.status_str_cfg)
-            return
+            return False
 
         att_vc.set_properties(multi_prop_vc)
         att_ivc.set_properties(multi_prop_ivc)
-
+        return True
 
     ##############################################################################################################
     #
@@ -376,7 +376,9 @@ class TrimCircuit (PyTango.Device_4Impl):
                         return False
 
                     #set the allowed component, unit of k, etc
-                    self.config_type() 
+                    config_type_ok = self.config_type() 
+                    if config_type_ok == False:
+                        return False
 
                     #set alarm levels on MainFieldComponent (etc) corresponding to the PS alarms
                     if self.hasCalibData[self.Mode]:
@@ -593,10 +595,13 @@ class TrimCircuit (PyTango.Device_4Impl):
         if self.scaleField:
             self.debug_stream("Energy (Brho) changed to %f (%f): will recalculate current to preserve field" % (self.energy_r, self.BRho) )
             #since brho changed, need to recalc the field
+            sign = -1
+            if self.allowed_component == 0 and self.Type not in ["vkick","Y_CORRECTOR"]:
+                sign =  1
             if self.Tilt == 0 and self.Mode != "Y_CORRECTOR":
-                self.fieldB[self.allowed_component]  = self.MainFieldComponent_r * self.BRho
+                self.fieldB[self.allowed_component]  = self.MainFieldComponent_r * self.BRho * sign
             else:
-                self.fieldA[self.allowed_component]  = self.MainFieldComponent_r * self.BRho
+                self.fieldA[self.allowed_component]  = self.MainFieldComponent_r * self.BRho * sign
             self.set_current \
                 = calculate_current(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.fieldA, self.fieldB, False)
             ###########################################################
@@ -635,14 +640,16 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def write_MainFieldComponent(self, attr):
         self.debug_stream("In write_MainFieldComponent()")
-        attr_MainFieldComponent_write=attr.get_write_value()
-        self.MainFieldComponent_w = attr_MainFieldComponent_write
+        self.MainFieldComponent_w = attr.get_write_value()
         #Note that we set the component of the field vector directly here, but
         #calling calculate_fields will in turn set the whole vector, including this component again
+        sign = -1
+        if self.allowed_component == 0 and self.Type not in ["vkick","Y_CORRECTOR"]:
+            sign =  1
         if self.Tilt == 0 and self.Mode != "Y_CORRECTOR":
-            self.fieldB[self.allowed_component]  = attr_MainFieldComponent_write * self.BRho
+            self.fieldB[self.allowed_component]  = self.attr_MainFieldComponent_w * self.BRho * sign
         else:
-            self.fieldA[self.allowed_component]  = attr_MainFieldComponent_write * self.BRho
+            self.fieldA[self.allowed_component]  = self.attr_MainFieldComponent_w * self.BRho * sign
 
         self.set_current \
             = calculate_current(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.fieldA, self.fieldB, False)
