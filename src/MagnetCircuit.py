@@ -631,9 +631,9 @@ class MagnetCircuit (PyTango.Device_4Impl):
             if self.allowed_component == 0 and self.Type not in ["vkick","Y_CORRECTOR"]:
                 sign =  1
             if self.Tilt == 0 and self.Type != "vkick":
-                self.fieldB[self.allowed_component]  = self.attr_MainFieldComponent_w * self.BRho * sign
+                self.fieldB[self.allowed_component]  = self.MainFieldComponent_w * self.BRho * sign
             else:
-                self.fieldA[self.allowed_component]  = self.attr_MainFieldComponent_w * self.BRho * sign
+                self.fieldA[self.allowed_component]  = self.MainFieldComponent_w * self.BRho * sign
 
             self.set_current \
                 = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,  self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.fieldA, self.fieldB, self.is_sole)
