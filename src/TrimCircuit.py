@@ -596,7 +596,7 @@ class TrimCircuit (PyTango.Device_4Impl):
             self.debug_stream("Energy (Brho) changed to %f (%f): will recalculate current to preserve field" % (self.energy_r, self.BRho) )
             #since brho changed, need to recalc the field
             sign = -1
-            if self.allowed_component == 0 and self.Type not in ["vkick","Y_CORRECTOR"]:
+            if self.allowed_component == 0 and self.Mode not in ["vkick","Y_CORRECTOR"]:
                 sign =  1
             if self.Tilt == 0 and self.Mode != "Y_CORRECTOR":
                 self.fieldB[self.allowed_component]  = self.MainFieldComponent_r * self.BRho * sign
@@ -644,7 +644,7 @@ class TrimCircuit (PyTango.Device_4Impl):
         #Note that we set the component of the field vector directly here, but
         #calling calculate_fields will in turn set the whole vector, including this component again
         sign = -1
-        if self.allowed_component == 0 and self.Type not in ["vkick","Y_CORRECTOR"]:
+        if self.allowed_component == 0 and self.Mode not in ["vkick","Y_CORRECTOR"]:
             sign =  1
         if self.Tilt == 0 and self.Mode != "Y_CORRECTOR":
             self.fieldB[self.allowed_component]  = self.MainFieldComponent_w * self.BRho * sign
