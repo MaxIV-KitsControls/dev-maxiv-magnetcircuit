@@ -16,7 +16,8 @@ from devicetest import DeviceTestCase
 # Device test case
 class MagnetCircuitTestCase(DeviceTestCase):
 
-    magnets = {} # not needed
+    magnets = {"SECTION/MAG/MAG-01",
+               "SECTION/MAG/MAG-02"} # not needed
     device = MagnetCircuit.MagnetCircuit
     device_cls = MagnetCircuit.MagnetCircuitClass
 
@@ -55,6 +56,7 @@ class MagnetCircuitTestCase(DeviceTestCase):
 
         def make_magnet_proxy(devname):
             mock_proxy = make_proxy()
+            mock_proxy.get_property.return_value = {"Length": [1.0], "Tilt": [2], "Type": ["kquad"]}
             return mock_proxy
 
         cls.ps_proxy = make_ps_proxy()
