@@ -7,7 +7,7 @@ from cond_state import MagnetCycling as ConditioningState
 
 class MagnetCycling(object):
 
-    def __init__(self, powersupply, hicurrent, locurrent, wait, iterations):
+    def __init__(self, powersupply, hicurrent, locurrent, wait, iterations, current_step, wait_step):
 
         self.ps = powersupply
 
@@ -16,6 +16,8 @@ class MagnetCycling(object):
         self.locurrent_set_point = locurrent
         self.wait_time  = wait
         self.iterations = iterations
+        self.current_step = current_step
+        self.wait_step = wait_step
 
         # States
         self._conditioning = False
@@ -42,8 +44,6 @@ class MagnetCycling(object):
             # Stop any action
             self.stop()
 
-    def increase_current(self):
-        self.powersupply.setCurrrent(voltage+dv)
 
     def start(self):
         # Start the ramping
@@ -57,7 +57,9 @@ class MagnetCycling(object):
             self.hicurrent_set_point,
             self.locurrent_set_point,
             self.wait_time,
-            self.iterations)
+            self.iterations,
+            self.current_step,
+            self.wait_step)
 
         self.cycling_thread = Thread(target=self.ramp)
         self.cycling_thread.start()
@@ -88,6 +90,7 @@ class MagnetCycling(object):
         """The main loop for one cycling run."""
 
         while not (self.statemachine.finished or self.cycling_stop.isSet()):
+            print 'loop'
             self.cycling_end_step.clear()
             self.statemachine.proceed()
             self.cycling_end_step.set()

@@ -7,7 +7,6 @@ class DummyPS:
         self.moving = False
 
     def getCurrent(self):
-
         return self.current
 
     def setCurrent(self,data):
