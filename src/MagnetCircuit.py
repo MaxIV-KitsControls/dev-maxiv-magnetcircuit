@@ -43,6 +43,9 @@ class Wrapped_PS_Device(object):
 
     def setCurrent(self, value):
         self.psdev.write_attribute("Current", value)
+        
+    def getCurrent(self):
+		return self.psdev.read_attribute("Current").w_value
 
     #def getCurrent(self):
     #    return self.psdev.read_attribute("Current").w_value
@@ -65,6 +68,8 @@ class Wrapped_PS_Device(object):
 class MagnetCircuit (PyTango.Device_4Impl):
 
     _maxdim = 10 #Maximum number of multipole components
+    _default_current_step = 1. #default value of cycling current step
+    _default_wait_step = 1. #default value of cycling waiting step
 
     def __init__(self,cl, name):
         PyTango.Device_4Impl.__init__(self,cl,name)
@@ -112,7 +117,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.is_sole = False #hack for solenoids until configured properly
         self.is_corr = False #correctors differ from dipoles (theta vs Theta)
 
-
         #Proxy to power supply device
         self._ps_device = None
         self.actual_current = None
@@ -125,6 +129,7 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.Type = ""
         self.hasCalibData = False
         magnet_properties_ok = self.read_magnet_properties() #this is reading properties from the magnet, not the circuit!
+
         #
         #The magnet type determines the allowed field component to be controlled.
         #Note that in the multipole expansion we have:
@@ -343,7 +348,8 @@ class MagnetCircuit (PyTango.Device_4Impl):
 
         if self.ps_device:
             self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
-            self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 4)
+            self._cycler =  MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 4,
+                                                            self._default_current_step, self._default_wait_step)
         else:
             self.status_str_cyc = "Setup cycling: cannot get proxy to %s " % self.PowerSupplyProxy 
 
@@ -658,7 +664,6 @@ class MagnetCircuit (PyTango.Device_4Impl):
         return self.get_current_and_field() and not self.field_out_of_range
 
     #
-
     def read_CyclingStatus(self, attr):
         self.debug_stream("In read_CyclingStatus()")
         #need to check cycling status
@@ -670,6 +675,26 @@ class MagnetCircuit (PyTango.Device_4Impl):
         #need to check cycling state
         self.check_cycling_state()
         attr.set_value(self.iscycling)
+
+    def write_CyclingCurrentStep(self, attr):
+        self.debug_stream("In write_CyclingCurrentStep()")
+        data = attr.get_write_value()
+        if self._cycler and not self.iscycling:
+            self._cycler.current_step = data
+
+    def read_CyclingCurrentStep(self, attr):
+        self.debug_stream("In read_CyclingCurrentStep()")
+        attr.set_value(self._cycler.current_step)
+
+    def write_CyclingTimeStep(self, attr):
+        self.debug_stream("In write_CyclingTimeStep()")
+        data = attr.get_write_value()
+        if self._cycler and not self.iscycling:
+            self._cycler.time_step = data
+
+    def read_CyclingTimeStep(self, attr):
+        self.debug_stream("In read_CyclingTimeStep()")
+        attr.set_value(self._cycler.time_step)
 
     #-----------------------------------------------------------------------------
     #    MagnetCircuit command methods
@@ -843,6 +868,27 @@ class MagnetCircuitClass(PyTango.DeviceClass):
              'label': "Cycling State",
              'doc': "state of cycling procedure"
          } ],
+
+        'CyclingCurrentStep':
+        [[PyTango.DevDouble,
+          PyTango.SCALAR,
+          PyTango.READ_WRITE],
+         {
+             'label': "Cycling Current Step",
+             'format': "%6.6f",
+             'doc': "curent increase or decrease value at each ramp step"
+         } ],
+
+        'CyclingTimeStep':
+        [[PyTango.DevDouble,
+          PyTango.SCALAR,
+          PyTango.READ_WRITE],
+         {
+             'label': "Cycling Current Step",
+             'format': "%6.6f",
+             'doc': "Waiting time between each current step"
+         } ],
+
         'MainFieldComponent':
         [[PyTango.DevDouble,
           PyTango.SCALAR,
