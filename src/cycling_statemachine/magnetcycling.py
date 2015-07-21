@@ -90,7 +90,6 @@ class MagnetCycling(object):
         """The main loop for one cycling run."""
 
         while not (self.statemachine.finished or self.cycling_stop.isSet()):
-            print 'loop'
             self.cycling_end_step.clear()
             self.statemachine.proceed()
             self.cycling_end_step.set()
