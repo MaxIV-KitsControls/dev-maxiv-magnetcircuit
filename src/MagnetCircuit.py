@@ -690,11 +690,11 @@ class MagnetCircuit (PyTango.Device_4Impl):
         self.debug_stream("In write_CyclingTimeStep()")
         data = attr.get_write_value()
         if self._cycler and not self.iscycling:
-            self._cycler.time_step = data
+            self._cycler.wait_step = data
 
     def read_CyclingTimeStep(self, attr):
         self.debug_stream("In read_CyclingTimeStep()")
-        attr.set_value(self._cycler.time_step)
+        attr.set_value(self._cycler.wait_step)
 
     #-----------------------------------------------------------------------------
     #    MagnetCircuit command methods
