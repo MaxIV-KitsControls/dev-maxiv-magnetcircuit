@@ -5,8 +5,8 @@ from state import StateMachine
 
 class MagnetCycling(StateMachine):
     def __init__(self, powersupply,
-                 current_hi, current_lo, wait, iterations_max,
-                 step_wait, current_step):
+                 current_hi, current_lo, wait, iterations_max, current_step,
+                 step_wait):
         self.powersupply = powersupply
 
         self.current_hi = current_hi
@@ -41,7 +41,9 @@ class MagnetCycling(StateMachine):
             self.set_timeout(self.wait)
 
         def step_wait():
+            print "self.step_wait",  self.step_wait
             self.set_step_timeout(self.step_wait)
+            print "self.step_timeout", self.step_timeout
 
         self.INITIALISE.when(lambda: self.powersupply.isOn()).goto(self.SET_STEP_LO)
 
