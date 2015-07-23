@@ -705,6 +705,27 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.debug_stream("In read_CyclingTimeStep()")
         attr.set_value(self._cycler.wait_step)
 
+    def read_CyclingIterations(self, attr):
+        self.debug_stream("In read_CyclingIterations()")
+        attr.set_value(self._cycler.iterations)
+        pass
+
+    def write_CyclingIterations(self, attr):
+        self.debug_stream("In write_CyclingIterations()")
+        data = attr.get_write_value()
+        if self._cycler and not self.iscycling:
+            self._cycler.iterations = data
+
+    def read_CyclingTimePlateau(self, attr):
+        self.debug_stream("In read_CyclingTimePlateau()")
+        attr.set_value(self._cycler.wait_time)
+
+    def write_CyclingTimePlateau(self, attr):
+        self.debug_stream("In write_CyclingTimePlateau()")
+        data = attr.get_write_value()
+        if self._cycler and not self.iscycling:
+            self._cycler.wait_time = data
+
     # -----------------------------------------------------------------------------
     #    MagnetCircuit command methods
     # -----------------------------------------------------------------------------
@@ -898,6 +919,26 @@ class MagnetCircuitClass(PyTango.DeviceClass):
                  'unit': "s",
                  'format': "%6.6f",
                  'doc': "Waiting time between each current step"
+             }],
+
+        'CyclingIterations':
+            [[PyTango.DevLong,
+              PyTango.SCALAR,
+              PyTango.READ_WRITE],
+             {
+                 'label': "Cycling Iteration",
+                 'doc': "Number of cycling interations"
+             }],
+
+        'CyclingTimePlateau':
+            [[PyTango.DevDouble,
+              PyTango.SCALAR,
+              PyTango.READ_WRITE],
+             {
+                 'label': "Cycling Wait Plateau",
+                 'unit': "s",
+                 'format': "%6.6f",
+                 'doc': "Waiting time at maximum and minimum current"
              }],
 
         'MainFieldComponent':
