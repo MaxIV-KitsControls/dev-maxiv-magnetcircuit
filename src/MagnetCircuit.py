@@ -884,6 +884,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
               PyTango.READ_WRITE],
              {
                  'label': "Cycling Current Step",
+                 'unit': "A",
                  'format': "%6.6f",
                  'doc': "curent increase or decrease value at each ramp step"
              }],
@@ -893,7 +894,8 @@ class MagnetCircuitClass(PyTango.DeviceClass):
               PyTango.SCALAR,
               PyTango.READ_WRITE],
              {
-                 'label': "Cycling wait Step",
+                 'label': "Cycling Wait Step",
+                 'unit': "s",
                  'format': "%6.6f",
                  'doc': "Waiting time between each current step"
              }],
