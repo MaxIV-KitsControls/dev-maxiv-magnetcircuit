@@ -1,10 +1,6 @@
-import unittest
-
 from mock import MagicMock
 import PyTango
-
 import MagnetCircuit
-
 from functools import partial
 from devicetest import DeviceTestCase
 
@@ -131,6 +127,26 @@ class MagnetCircuitTestCase(DeviceTestCase):
         self.assertEqual(present, expected,
                          "present state: %s, expected state: %s" % (present, expected))
 
+    def cycling_attribute(self, attribute_name, set_value, other_value):
+        write_attribute = partial(self.device.write_attribute, attribute_name)
+        read_attribute = lambda: self.device.read_attribute(attribute_name).value
+        write_attribute(set_value)
+        read = read_attribute()
+        # check if write value is set
+        self.assertEqual(read, set_value,
+                         "present %s: %s, expected : %s" % (attribute_name, read, set_value))
+        # while cycling, writing value do nothing
+        self.device.StartCycle()
+        write_attribute(other_value)
+        read = read_attribute()
+        self.assertEqual(read, set_value,
+                         "present %s: %s, expected : %s" % (attribute_name, read, set_value))
+        self.device.StopCycle()
+        write_attribute(other_value)
+        read = read_attribute()
+        self.assertEqual(read, other_value,
+                         "present %s: %s, expected : %s" % (attribute_name, read, other_value))
+
     def test_Cycle(self):
         " StartCycle and StopCycle"
         self.assertState(PyTango.DevState.ON)
@@ -140,39 +156,17 @@ class MagnetCircuitTestCase(DeviceTestCase):
         self.assertState(PyTango.DevState.ON)
 
     def test_CyclingCurrentStep(self):
-        " set/read current step "
-        set_value = 4.2
-        other_value = 5.3
-        self.device.CyclingCurrentStep = set_value
-        read = self.device.CyclingCurrentStep
-        self.assertEqual(read, set_value,
-                         "present CyclingCurrentStep: %s, expected CyclingCurrentStep: %s" % (read, set_value))
-        self.device.StartCycle()
-        self.device.CyclingCurrentStep = other_value
-        read = self.device.CyclingCurrentStep
-        self.assertEqual(read, set_value,
-                         "present CyclingCurrentStep: %s, expected CyclingCurrentStep: %s" % (read, set_value))
-        self.device.StopCycle()
-        self.device.CyclingCurrentStep = other_value
-        read = self.device.CyclingCurrentStep
-        self.assertEqual(read, other_value,
-                         "present CyclingCurrentStep: %s, expected CyclingCurrentStep: %s" % (read, other_value))
+        " set/read cycling current step "
+        self.cycling_attribute("CyclingCurrentStep", 4.2, 5.3)
 
     def test_CyclingTimeStep(self):
-        " set/read time step "
-        set_value = 4.1
-        other_value = 5.2
-        self.device.CyclingTimeStep = set_value
-        read = self.device.CyclingTimeStep
-        self.assertEqual(read, set_value,
-                         "present CyclingTimeStep: %s, expected CyclingTimeStep: %s" % (read, set_value))
-        self.device.StartCycle()
-        self.device.CyclingTimeStep = other_value
-        read = self.device.CyclingTimeStep
-        self.assertEqual(read, set_value,
-                         "present CyclingTimeStep: %s, expected CyclingTimeStep: %s" % (read, set_value))
-        self.device.StopCycle()
-        self.device.CyclingTimeStep = other_value
-        read = self.device.CyclingTimeStep
-        self.assertEqual(read, other_value,
-                         "present CyclingTimeStep: %s, expected CyclingTimeStep: %s" % (read, other_value))
+        " set/read cycling time step "
+        self.cycling_attribute("CyclingCurrentStep", 4.1, 5.2)
+
+    def test_CyclingIterations(self):
+        " set/read cycling iteration "
+        self.cycling_attribute("CyclingIterations", 5, 22)
+
+    def test_CyclingTimePlateau(self):
+        " set/read cycling time plateau "
+        self.cycling_attribute("CyclingTimePlateau", 3.2, 15.3)
