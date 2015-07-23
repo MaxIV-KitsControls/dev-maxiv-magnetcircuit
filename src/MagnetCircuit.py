@@ -893,7 +893,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
               PyTango.SCALAR,
               PyTango.READ_WRITE],
              {
-                 'label': "Cycling Current Step",
+                 'label': "Cycling wait Step",
                  'format': "%6.6f",
                  'doc': "Waiting time between each current step"
              }],
