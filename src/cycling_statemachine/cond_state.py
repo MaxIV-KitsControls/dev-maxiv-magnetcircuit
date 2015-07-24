@@ -6,19 +6,23 @@ from state import StateMachine
 class MagnetCycling(StateMachine):
     def __init__(self, powersupply,
                  current_hi, current_lo, wait, iterations_max, current_step,
-                 step_wait):
+                 ramp_time, steps , current_nom_percentage=0.9):
         self.powersupply = powersupply
 
         self.current_hi = current_hi
         self.current_lo = current_lo  # the end ramp current
+        self.current_nom_percentage = current_nom_percentage  # nominal current is a percentage of the max current
         self.wait = wait  # time (s) to wait at max and min currents
         self.iterations = 0
         self.interations_max = iterations_max
 
-        self.step_wait = step_wait # time to wait at each step
-        self.current_step = current_step # current add/sub at each step
-        self.step_timeout = 0
+        try:
+            self.step_time  = ramp_time / steps  # increase/decrease current and wait
+        except ZeroDivisionError:
+            self.step_time  = ramp_time
 
+        self.current_step = current_step  # current add/sub at each step
+        self.step_timeout = 0
         self.iterationstatus = " (" + str(self.iterations) + "/" + str(self.interations_max) + ")"
 
         def print_state_change(old, new):
@@ -40,10 +44,8 @@ class MagnetCycling(StateMachine):
         def wait():
             self.set_timeout(self.wait)
 
-        def step_wait():
-            print "self.step_wait",  self.step_wait
-            self.set_step_timeout(self.step_wait)
-            print "self.step_timeout", self.step_timeout
+        #def step_wait():
+        #    self.set_step_timeout(self.step_wait)
 
         self.INITIALISE.when(lambda: self.powersupply.isOn()).goto(self.SET_STEP_LO)
 
@@ -54,7 +56,7 @@ class MagnetCycling(StateMachine):
         self.SET_STEP_LO.when(lambda: self.powersupply.isMoving() == False and self.is_low_current()).goto(self.WAIT_LO)
 
         # waiting state between two current decreasing state
-        self.WAIT_STEP_LO.set_action(step_wait)
+        #self.WAIT_STEP_LO.set_action(step_wait)
         self.WAIT_STEP_LO.when(lambda: time.time() >= self.step_timeout).goto(self.SET_STEP_LO)
 
         # waiting state when current is at minimum value
@@ -69,7 +71,7 @@ class MagnetCycling(StateMachine):
             self.WAIT_HI)
 
         # waiting state between two current increasing state
-        self.WAIT_STEP_HI.set_action(step_wait)
+        #self.WAIT_STEP_HI.set_action(step_wait)
         self.WAIT_STEP_HI.when(lambda: time.time() >= self.step_timeout).goto(self.SET_STEP_HI)
 
         # waiting state when current is at maximum value
@@ -88,7 +90,7 @@ class MagnetCycling(StateMachine):
             self.DONE)
 
         # waiting state between two current decreasing state
-        self.WAIT_STEP_NOM_CURRENT.set_action(step_wait)
+        #self.WAIT_STEP_NOM_CURRENT.set_action(step_wait)
         self.WAIT_STEP_NOM_CURRENT.when(lambda: time.time() >= self.step_timeout).goto(self.SET_STEP_NOM_CURRENT)
 
     def set_max_current(self):
@@ -98,10 +100,10 @@ class MagnetCycling(StateMachine):
         return True
 
     def get_nom_current(self):
-        return self.current_hi / 1.1
+        return self.current_hi * self.current_nom_percentage
 
     def set_nom_current(self):
-        self.powersupply.setCurrent(self.current_hi / 1.1)
+        self.powersupply.setCurrent(self.get_nom_current())
         return True
 
     def set_min_current(self):
@@ -127,6 +129,7 @@ class MagnetCycling(StateMachine):
         self.step_timeout = dt + time.time()
 
     def ramp_to_max_current(self):
+        self.set_step_timeout(self.step_time)
         current = self.current()
         if self.current_hi - current >= self.current_step:
             self.powersupply.setCurrent(current + self.current_step)
@@ -136,6 +139,7 @@ class MagnetCycling(StateMachine):
             self.iterationstatus = " (" + str(self.iterations) + "/" + str(self.interations_max) + ")"
 
     def ramp_to_min_current(self):
+        self.set_step_timeout(self.step_time)
         current = self.current()
         if current - self.current_lo >= self.current_step:
             self.powersupply.setCurrent(current - self.current_step)
@@ -143,6 +147,7 @@ class MagnetCycling(StateMachine):
             self.powersupply.setCurrent(self.current_lo)
 
     def ramp_to_nom_current(self):
+        self.set_step_timeout(self.step_time)
         current = self.current()
         nom_current = self.get_nom_current()
         if current > self.get_nom_current():
