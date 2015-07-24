@@ -14,7 +14,10 @@ CURRENT_LO = 0
 WAIT = 5
 ITERATIONS = 3
 
-STEP_TIME = 1.  # s
+
+RAMP_TIME = 10.# s
+STEPS = 10
+STEP_TIME = RAMP_TIME /STEPS  # s
 STEP_CURRENT = 0.5
 
 
@@ -28,7 +31,8 @@ class MagnetCyclingStateMachineTestCase(unittest.TestCase):
             self.powersupply,
             current_hi=CURRENT_HI, current_lo=CURRENT_LO,
             wait=WAIT, iterations_max=ITERATIONS,
-            step_wait=STEP_TIME, current_step=STEP_CURRENT)
+            ramp_time=RAMP_TIME, steps=STEPS, current_step=STEP_CURRENT
+            )
 
     # use this in main tests below to check state is as expected
     def assertState(self, expected):

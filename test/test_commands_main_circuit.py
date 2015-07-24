@@ -129,7 +129,7 @@ class MagnetCircuitTestCase(DeviceTestCase):
 
     def cycling_attribute(self, attribute_name, set_value, other_value):
         write_attribute = partial(self.device.write_attribute, attribute_name)
-        read_attribute = lambda: self.device.read_attribute(attribute_name).value
+        read_attribute = lambda: self.device.read_attribute(attribute_name).w_value
         write_attribute(set_value)
         read = read_attribute()
         # check if write value is set
@@ -137,7 +137,10 @@ class MagnetCircuitTestCase(DeviceTestCase):
                          "present %s: %s, expected : %s" % (attribute_name, read, set_value))
         # while cycling, writing value do nothing
         self.device.StartCycle()
-        write_attribute(other_value)
+        with self.assertRaises(PyTango.DevFailed) as context:
+            write_attribute(other_value)
+        expected_message = "It is currently not allowed to write attribute %s. The device state is UNKNOWN" % (attribute_name)
+        self.assertIn(expected_message, str(context.exception))
         read = read_attribute()
         self.assertEqual(read, set_value,
                          "present %s: %s, expected : %s" % (attribute_name, read, set_value))

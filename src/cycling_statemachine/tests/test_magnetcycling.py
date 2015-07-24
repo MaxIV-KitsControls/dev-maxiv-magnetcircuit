@@ -5,7 +5,8 @@ from cycling_statemachine import magnetcycling
 from time import sleep
 
 DEFAULT_CURRENT_STEP = 1.2
-DEFAULT_WAIT_STEP = 1.3
+DEFAULT_RAMP_TIME = 1.3
+DEFAULT_STEPS = 10
 LOOP = 1
 class MagnetCyclingStateMachineTestCase(unittest.TestCase):
     def setUp(self):
@@ -15,7 +16,7 @@ class MagnetCyclingStateMachineTestCase(unittest.TestCase):
         self.statemachine.iterationstatus = ''
         self.statemachine.finished = False
         self.statemachine.__nonzero__ = lambda self: False
-        args = Mock('powersupply'), 10, -10, 5, 4, DEFAULT_CURRENT_STEP, DEFAULT_WAIT_STEP
+        args = Mock('powersupply'), 10, -10, 5, 4, DEFAULT_CURRENT_STEP, DEFAULT_RAMP_TIME, DEFAULT_STEPS
         self.magnetcycling = magnetcycling.MagnetCycling(*args)
         self.magnetcycling.cycling = True
         assert self.magnetcycling.cycling
@@ -53,16 +54,27 @@ class MagnetCyclingStateMachineTestCase(unittest.TestCase):
         self.assertEqual(present, value,
                          "present current_step: %s, expected current_step: %s" % (present, value))
 
-    def test_wait_step(self):
+    def test_ramp_time(self):
         " r/w in attribute wait_step. "
-        present = self.magnetcycling.wait_step
-        self.assertEqual(present, DEFAULT_WAIT_STEP,
-                         "present current_step: %s, expected current_step: %s" % (present, DEFAULT_WAIT_STEP))
+        present = self.magnetcycling.ramp_time
+        self.assertEqual(present, DEFAULT_RAMP_TIME,
+                         "present ramp_time: %s, expected ramp_time: %s" % (present, DEFAULT_RAMP_TIME))
         value = 3
-        self.magnetcycling.wait_step = 3
-        present = self.magnetcycling.wait_step
+        self.magnetcycling.ramp_time = 3
+        present = self.magnetcycling.ramp_time
         self.assertEqual(present, value,
-                         "present current_step: %s, expected current_step: %s" % (present, value))
+                         "present ramp_time: %s, expected ramp_time: %s" % (present, value))
+
+    def test_steps(self):
+        " r/w in attribute wait_step. "
+        present = self.magnetcycling.steps
+        self.assertEqual(present, DEFAULT_STEPS,
+                         "present steps: %s, expected steps: %s" % (present, DEFAULT_STEPS))
+        value = 3
+        self.magnetcycling.steps = 3
+        present = self.magnetcycling.steps
+        self.assertEqual(present, value,
+                         "present steps: %s, expected steps: %s" % (present, value))
 
     def test_cycling(self):
         " statemachine finished. "
