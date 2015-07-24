@@ -6,23 +6,22 @@ from cond_state import MagnetCycling as ConditioningState
 
 
 class MagnetCycling(object):
-    def __init__(self, powersupply, hicurrent, locurrent, wait, iterations, current_step, wait_step):
+    def __init__(self, powersupply, hicurrent, locurrent, wait, iterations, current_step, ramp_time, steps,current_nom_percentage=0.9):
         self.ps = powersupply
         # Conditions
         self.hicurrent_set_point = hicurrent
         self.locurrent_set_point = locurrent
+        self.current_nom_percentage = current_nom_percentage
         self.wait_time = wait
         self.iterations = iterations
         self.current_step = current_step
-        self.wait_step = wait_step
+        self.ramp_time = ramp_time
+        self.steps = steps
         # States
         self._conditioning = False
         # Cycling
         self.cycling_thread = None  # The conditioning thread
-        self.cycling_run = Event()  # Set while running.
-        self.cycling_end_step = Event()  # Signal for the end of each step
         self.cycling_stop = Event()  # Set when aborting.
-        self.cycling_done = Event()  # Set when done.
         self.statemachine = None
 
     @property
@@ -40,10 +39,7 @@ class MagnetCycling(object):
 
     def start(self):
         # Start the ramping
-        self.cycling_run.set()
-        self.cycling_end_step.clear()
         self.cycling_stop.clear()
-        self.cycling_done.clear()
         self.statemachine = ConditioningState(
             self.ps,
             self.hicurrent_set_point,
@@ -51,15 +47,11 @@ class MagnetCycling(object):
             self.wait_time,
             self.iterations,
             self.current_step,
-            self.wait_step)
+            self.ramp_time,
+            self.steps,
+            self.current_nom_percentage)
         self.cycling_thread = Thread(target=self.ramp)
         self.cycling_thread.start()
-
-    # def pause(self):
-    #    self.cycling_run.clear()
-
-    # def resume(self):
-    #    self.cycling_run.set()
 
     def stop(self):
         # Stop the conditioning thread
@@ -75,14 +67,10 @@ class MagnetCycling(object):
             return "NOT CYCLING (limits are %s %s A)" % (self.locurrent_set_point, self.hicurrent_set_point)
         return (self.statemachine.state + self.statemachine.iterationstatus)
 
-    def ramp(self, dt=1.0):
+    def ramp(self, dt=0.1):
         """The main loop for one cycling run."""
         while not (self.statemachine.finished or self.cycling_stop.isSet()):
-            self.cycling_end_step.clear()
             self.statemachine.proceed()
-            self.cycling_end_step.set()
             self.cycling_stop.wait(dt)  # Defines the period of the loop
-            while not self.cycling_run.isSet():
-                self.cycling_run.wait(1.0)  # Paused; do nothing
-        self.cycling_done.set()
         self.statemachine = None
+
