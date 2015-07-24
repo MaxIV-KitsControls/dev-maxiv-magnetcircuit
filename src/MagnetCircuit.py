@@ -67,7 +67,8 @@ class Wrapped_PS_Device(object):
 class MagnetCircuit(PyTango.Device_4Impl):
     _maxdim = 10  # Maximum number of multipole components
     _default_current_step = 1.  # default value of cycling current step
-    _default_wait_step = 1.  # default value of cycling waiting step
+    _default_ramp_time = 10.  # default value of cycling waiting step
+    _default_steps = 4
 
     def __init__(self, cl, name):
         PyTango.Device_4Impl.__init__(self, cl, name)
@@ -350,7 +351,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
         if self.ps_device:
             self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
             self._cycler = MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 4,
-                                         self._default_current_step, self._default_wait_step)
+                                         self._default_current_step, self._default_ramp_time, self._default_steps)
         else:
             self.status_str_cyc = "Setup cycling: cannot get proxy to %s " % self.PowerSupplyProxy
 
@@ -687,44 +688,41 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
     def write_CyclingCurrentStep(self, attr):
         self.debug_stream("In write_CyclingCurrentStep()")
-        data = attr.get_write_value()
-        if self._cycler and not self.iscycling:
-            self._cycler.current_step = data
+        self._cycler.current_step = attr.get_write_value()
 
-    def read_CyclingCurrentStep(self, attr):
-        self.debug_stream("In read_CyclingCurrentStep()")
-        attr.set_value(self._cycler.current_step)
+    def is_CyclingCurrentStep_allowed(self, attr):
+        return self._cycler and not self.iscycling
 
-    def write_CyclingTimeStep(self, attr):
-        self.debug_stream("In write_CyclingTimeStep()")
-        data = attr.get_write_value()
-        if self._cycler and not self.iscycling:
-            self._cycler.wait_step = data
+    def write_CyclingRampTime(self, attr):
+        self.debug_stream("In write_CyclingRampTime()")
+        self._cycler.ramp_time = attr.get_write_value()
 
-    def read_CyclingTimeStep(self, attr):
-        self.debug_stream("In read_CyclingTimeStep()")
-        attr.set_value(self._cycler.wait_step)
-
-    def read_CyclingIterations(self, attr):
-        self.debug_stream("In read_CyclingIterations()")
-        attr.set_value(self._cycler.iterations)
-        pass
+    def is_CyclingRampTime_allowed(self, attr):
+        return self._cycler and not self.iscycling
 
     def write_CyclingIterations(self, attr):
         self.debug_stream("In write_CyclingIterations()")
-        data = attr.get_write_value()
-        if self._cycler and not self.iscycling:
-            self._cycler.iterations = data
+        self._cycler.iterations = attr.get_write_value()
 
-    def read_CyclingTimePlateau(self, attr):
-        self.debug_stream("In read_CyclingTimePlateau()")
-        attr.set_value(self._cycler.wait_time)
+    def is_CyclingIterations_allowed(self, attr):
+        return self._cycler and not self.iscycling
 
     def write_CyclingTimePlateau(self, attr):
         self.debug_stream("In write_CyclingTimePlateau()")
-        data = attr.get_write_value()
-        if self._cycler and not self.iscycling:
-            self._cycler.wait_time = data
+        self._cycler.wait_time = attr.get_write_value()
+
+    def is_CyclingTimePlateau_allowed(self, attr):
+        return self._cycler and not self.iscycling
+
+    def write_NominalCurrentPercentage(self, attr):
+        self.debug_stream("In write_NominalCurrentPercentage()")
+        self._cycler.current_nom_percentage = attr.get_write_value()
+
+    def is_NominalCurrentPercentage_allowed(self, attr):
+        return self._cycler and not self.iscycling
+
+
+
 
     # -----------------------------------------------------------------------------
     #    MagnetCircuit command methods
@@ -902,7 +900,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
         'CyclingCurrentStep':
             [[PyTango.DevDouble,
               PyTango.SCALAR,
-              PyTango.READ_WRITE],
+              PyTango.WRITE],
              {
                  'label': "Cycling Current Step",
                  'unit': "A",
@@ -910,21 +908,21 @@ class MagnetCircuitClass(PyTango.DeviceClass):
                  'doc': "curent increase or decrease value at each ramp step"
              }],
 
-        'CyclingTimeStep':
+        'CyclingRampTime':
             [[PyTango.DevDouble,
               PyTango.SCALAR,
-              PyTango.READ_WRITE],
+              PyTango.WRITE],
              {
-                 'label': "Cycling Wait Step",
+                 'label': "Cycling Ramp Time",
                  'unit': "s",
                  'format': "%6.6f",
-                 'doc': "Waiting time between each current step"
+                 'doc': "Time to increase or decrease current to min/max value"
              }],
 
         'CyclingIterations':
             [[PyTango.DevLong,
               PyTango.SCALAR,
-              PyTango.READ_WRITE],
+              PyTango.WRITE],
              {
                  'label': "Cycling Iteration",
                  'doc': "Number of cycling interations"
@@ -933,13 +931,28 @@ class MagnetCircuitClass(PyTango.DeviceClass):
         'CyclingTimePlateau':
             [[PyTango.DevDouble,
               PyTango.SCALAR,
-              PyTango.READ_WRITE],
+              PyTango.WRITE],
              {
                  'label': "Cycling Wait Plateau",
                  'unit': "s",
                  'format': "%6.6f",
                  'doc': "Waiting time at maximum and minimum current"
              }],
+
+
+        'NominalCurrentPercentage':
+            [[PyTango.DevDouble,
+              PyTango.SCALAR,
+              PyTango.WRITE],
+             {
+                 'label': "Cycling Wait Plateau",
+                 'unit': "s",
+                 'format': "%6.6f",
+                 'max value': "100",
+                 'doc': "Waiting time at maximum and minimum current"
+             }],
+
+
 
         'MainFieldComponent':
             [[PyTango.DevDouble,
