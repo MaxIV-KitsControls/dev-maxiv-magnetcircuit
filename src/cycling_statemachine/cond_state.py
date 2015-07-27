@@ -17,7 +17,7 @@ class MagnetCycling(StateMachine):
         self.interations_max = iterations_max
 
         try:
-            self.step_time  = ramp_time / steps  # increase/decrease current and wait
+            self.step_time  = round(ramp_time / steps,3)  # increase/decrease current and wait
         except ZeroDivisionError:
             self.step_time  = ramp_time
 
@@ -132,8 +132,8 @@ class MagnetCycling(StateMachine):
 
     def ramp_to_max_current(self):
         self.set_step_timeout(self.step_time)
-        current = self.current()
-        if self.current_hi - current >= self.current_step:
+        current = round(self.current(), 3 )
+        if round(self.current_hi - current, 3 ) >= self.current_step:
             self.powersupply.setCurrent(current + self.current_step)
         else:
             self.powersupply.setCurrent(self.current_hi)
@@ -142,24 +142,24 @@ class MagnetCycling(StateMachine):
 
     def ramp_to_min_current(self):
         self.set_step_timeout(self.step_time)
-        current = self.current()
-        if current - self.current_lo >= self.current_step:
+        current = round(self.current(), 3)
+        if round(current - self.current_lo) > self.current_step:
             self.powersupply.setCurrent(current - self.current_step)
         else:
             self.powersupply.setCurrent(self.current_lo)
 
     def ramp_to_nom_current(self):
         self.set_step_timeout(self.step_time)
-        current = self.current()
+        current = round(self.current(), 3)
         nom_current = self.get_nom_current()
         if current > self.get_nom_current():
-            if current - nom_current >= self.current_step:
+            if round(current - nom_current,3) > self.current_step:
                 self.powersupply.setCurrent(current - self.current_step)
             else:
                 self.powersupply.setCurrent(nom_current)
 
         else:
-            if nom_current - current >= self.current_step:
+            if round(nom_current - current, 3 )  >= self.current_step:
                 self.powersupply.setCurrent(current + self.current_step)
             else:
                 self.powersupply.setCurrent(nom_current)
