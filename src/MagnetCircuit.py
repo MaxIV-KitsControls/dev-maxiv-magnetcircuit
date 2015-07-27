@@ -697,29 +697,78 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.debug_stream("In write_CyclingRampTime()")
         self._cycler.ramp_time = attr.get_write_value()
 
+    def read_CyclingRampTime(self, attr):
+        self.debug_stream("In read_CyclingRampTime()")
+        attr.set_value(self._cycler.ramp_time)
+
     def is_CyclingRampTime_allowed(self, attr):
-        return self._cycler and not self.iscycling
+        if attr == PyTango.AttReqType.WRITE_REQ:
+            return self._cycler and not self.iscycling
+        else:
+            return bool(self._cycler)
 
     def write_CyclingIterations(self, attr):
         self.debug_stream("In write_CyclingIterations()")
         self._cycler.iterations = attr.get_write_value()
 
+    def read_CyclingIterations(self, attr):
+        self.debug_stream("In write_CyclingIterations()")
+        attr.set_value(self._cycler.iterations)
+
     def is_CyclingIterations_allowed(self, attr):
-        return self._cycler and not self.iscycling
+        if attr == PyTango.AttReqType.WRITE_REQ:
+            return self._cycler and not self.iscycling
+        else:
+            return bool(self._cycler)
 
     def write_CyclingTimePlateau(self, attr):
         self.debug_stream("In write_CyclingTimePlateau()")
         self._cycler.wait_time = attr.get_write_value()
 
+    def read_CyclingTimePlateau(self, attr):
+        self.debug_stream("In read_CyclingTimePlateau()")
+        attr.set_value(self._cycler.wait_time)
+
     def is_CyclingTimePlateau_allowed(self, attr):
-        return self._cycler and not self.iscycling
+        if attr == PyTango.AttReqType.WRITE_REQ:
+            return self._cycler and not self.iscycling
+        else:
+            return bool(self._cycler)
+
+
+
+
+
+
+
+    def read_NominalCurrentPercentage(self, attr):
+        self.debug_stream("In read_NominalCurrentPercentage()")
+        attr.set_value(self._cycler.current_nom_percentage)
 
     def write_NominalCurrentPercentage(self, attr):
         self.debug_stream("In write_NominalCurrentPercentage()")
         self._cycler.current_nom_percentage = attr.get_write_value()
 
     def is_NominalCurrentPercentage_allowed(self, attr):
-        return self._cycler and not self.iscycling
+        if attr == PyTango.AttReqType.WRITE_REQ:
+            return self._cycler and not self.iscycling
+        else:
+            return bool(self._cycler)
+
+
+    def read_CyclingSteps(self, attr):
+        self.debug_stream("In read_CyclingSteps()")
+        attr.set_value(self._cycler.steps)
+
+    def write_CyclingSteps(self, attr):
+        self.debug_stream("In write_CyclingSteps()")
+        self._cycler.steps = attr.get_write_value()
+
+    def is_CyclingSteps_allowed(self, attr):
+        if attr == PyTango.AttReqType.WRITE_REQ:
+            return self._cycler and not self.iscycling
+        else:
+            return bool(self._cycler)
 
 
 
@@ -899,7 +948,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
         'CyclingRampTime':
             [[PyTango.DevDouble,
               PyTango.SCALAR,
-              PyTango.WRITE],
+              PyTango.READ_WRITE],
              {
                  'label': "Cycling Ramp Time",
                  'unit': "s",
@@ -907,10 +956,21 @@ class MagnetCircuitClass(PyTango.DeviceClass):
                  'doc': "Time to increase or decrease current to min/max value"
              }],
 
+       'CyclingSteps':
+            [[PyTango.DevLong,
+              PyTango.SCALAR,
+              PyTango.READ_WRITE],
+             {
+                 'label': "Cycling steps",
+                 'doc': "Number of current steps to increase current from low value to maximum"
+             }],
+
+
+
         'CyclingIterations':
             [[PyTango.DevLong,
               PyTango.SCALAR,
-              PyTango.WRITE],
+              PyTango.READ_WRITE],
              {
                  'label': "Cycling Iteration",
                  'doc': "Number of cycling interations"
@@ -919,7 +979,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
         'CyclingTimePlateau':
             [[PyTango.DevDouble,
               PyTango.SCALAR,
-              PyTango.WRITE],
+              PyTango.READ_WRITE],
              {
                  'label': "Cycling Wait Plateau",
                  'unit': "s",
@@ -931,13 +991,14 @@ class MagnetCircuitClass(PyTango.DeviceClass):
         'NominalCurrentPercentage':
             [[PyTango.DevDouble,
               PyTango.SCALAR,
-              PyTango.WRITE],
+              PyTango.READ_WRITE],
              {
-                 'label': "Cycling Wait Plateau",
-                 'unit': "s",
+                 'label': "Nominal Current Percentage",
+                 'unit': "A",
                  'format': "%6.6f",
-                 'max value': "100",
-                 'doc': "Waiting time at maximum and minimum current"
+                 'max value': "1.0",
+                 'min value': "0.0",
+                 'doc': "Nominal current is a percentage of the max current "
              }],
 
 
