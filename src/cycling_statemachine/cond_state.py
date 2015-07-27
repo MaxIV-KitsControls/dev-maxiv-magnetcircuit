@@ -21,7 +21,9 @@ class MagnetCycling(StateMachine):
         except ZeroDivisionError:
             self.step_time  = ramp_time
 
-        self.current_step = current_step  # current add/sub at each step
+
+        #self.current_step = current_step  # current add/sub at each step
+        self.current_step = (current_hi - current_lo ) / steps
         self.step_timeout = 0
         self.iterationstatus = " (" + str(self.iterations) + "/" + str(self.interations_max) + ")"
 

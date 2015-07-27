@@ -9,8 +9,8 @@ from dummies import DummyPS
 
 from mock import patch
 
-CURRENT_HI = 5
-CURRENT_LO = 0
+CURRENT_HI = 5.
+CURRENT_LO = 0.
 WAIT = 5
 ITERATIONS = 3
 
@@ -18,7 +18,7 @@ ITERATIONS = 3
 RAMP_TIME = 10.# s
 STEPS = 10
 STEP_TIME = RAMP_TIME /STEPS  # s
-STEP_CURRENT = 0.5
+STEP_CURRENT = (CURRENT_HI - CURRENT_LO) / STEPS
 
 
 class MagnetCyclingStateMachineTestCase(unittest.TestCase):

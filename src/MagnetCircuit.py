@@ -686,12 +686,12 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.check_cycling_state()
         attr.set_value(self.iscycling)
 
-    def write_CyclingCurrentStep(self, attr):
+    """def write_CyclingCurrentStep(self, attr):
         self.debug_stream("In write_CyclingCurrentStep()")
         self._cycler.current_step = attr.get_write_value()
 
     def is_CyclingCurrentStep_allowed(self, attr):
-        return self._cycler and not self.iscycling
+        return self._cycler and not self.iscycling"""
 
     def write_CyclingRampTime(self, attr):
         self.debug_stream("In write_CyclingRampTime()")
@@ -896,18 +896,6 @@ class MagnetCircuitClass(PyTango.DeviceClass):
                  'label': "Cycling State",
                  'doc': "state of cycling procedure"
              }],
-
-        'CyclingCurrentStep':
-            [[PyTango.DevDouble,
-              PyTango.SCALAR,
-              PyTango.WRITE],
-             {
-                 'label': "Cycling Current Step",
-                 'unit': "A",
-                 'format': "%6.6f",
-                 'doc': "curent increase or decrease value at each ramp step"
-             }],
-
         'CyclingRampTime':
             [[PyTango.DevDouble,
               PyTango.SCALAR,

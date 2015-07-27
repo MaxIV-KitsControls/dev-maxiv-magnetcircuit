@@ -157,14 +157,14 @@ class MagnetCircuitTestCase(DeviceTestCase):
         self.assertState(PyTango.DevState.RUNNING)
         self.device.StopCycle()
         self.assertState(PyTango.DevState.ON)
-
+    '''
     def test_CyclingCurrentStep(self):
         " set/read cycling current step "
         self.cycling_attribute("CyclingCurrentStep", 4.2, 5.3)
 
     def test_CyclingTimeStep(self):
         " set/read cycling time step "
-        self.cycling_attribute("CyclingCurrentStep", 4.1, 5.2)
+        self.cycling_attribute("CyclingCurrentStep", 4.1, 5.2)'''
 
     def test_CyclingIterations(self):
         " set/read cycling iteration "
@@ -173,3 +173,7 @@ class MagnetCircuitTestCase(DeviceTestCase):
     def test_CyclingTimePlateau(self):
         " set/read cycling time plateau "
         self.cycling_attribute("CyclingTimePlateau", 3.2, 15.3)
+
+    def test_CyclingRampTime(self):
+        " set/read cycling time plateau "
+        self.cycling_attribute("CyclingRampTime", 3.2, 15.3)
