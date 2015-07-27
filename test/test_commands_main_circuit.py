@@ -175,5 +175,10 @@ class MagnetCircuitTestCase(DeviceTestCase):
         self.cycling_attribute("CyclingTimePlateau", 3.2, 15.3)
 
     def test_CyclingRampTime(self):
-        " set/read cycling time plateau "
+        " set/read cycling ramp time "
         self.cycling_attribute("CyclingRampTime", 3.2, 15.3)
+
+
+    def test_CyclingSteps(self):
+        " set/read cycling steps "
+        self.cycling_attribute("CyclingSteps", 12, 13)
