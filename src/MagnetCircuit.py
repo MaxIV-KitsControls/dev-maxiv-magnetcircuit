@@ -994,7 +994,6 @@ class MagnetCircuitClass(PyTango.DeviceClass):
               PyTango.READ_WRITE],
              {
                  'label': "Nominal Current Percentage",
-                 'unit': "A",
                  'format': "%6.6f",
                  'max value': "1.0",
                  'min value': "0.0",
