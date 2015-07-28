@@ -6,7 +6,7 @@ from state import StateMachine
 class MagnetCycling(StateMachine):
     def __init__(self, powersupply,
                  current_hi, current_lo, wait, iterations_max, current_step,
-                 ramp_time, steps , current_nom_percentage=0.9):
+                 ramp_time, steps, current_nom_percentage=0.9):
         self.powersupply = powersupply
 
         self.current_hi = current_hi
@@ -17,13 +17,13 @@ class MagnetCycling(StateMachine):
         self.interations_max = iterations_max
 
         try:
-            self.step_time  = round(ramp_time / steps,3)  # increase/decrease current and wait
+            self.step_time = ramp_time / (steps - 1)  # increase/decrease current and wait
         except ZeroDivisionError:
-            self.step_time  = ramp_time
+            self.step_time = ramp_time
 
+        # self.current_step = current_step  # current add/sub at each step
+        self.current_step = round((current_hi - current_lo) / steps, 3)
 
-        #self.current_step = current_step  # current add/sub at each step
-        self.current_step = (current_hi - current_lo ) / steps
         self.step_timeout = 0
         self.iterationstatus = " (" + str(self.iterations) + "/" + str(self.interations_max) + ")"
 
@@ -46,7 +46,7 @@ class MagnetCycling(StateMachine):
         def wait():
             self.set_timeout(self.wait)
 
-        #def step_wait():
+        # def step_wait():
         #    self.set_step_timeout(self.step_wait)
 
         self.INITIALISE.when(lambda: self.powersupply.isOn()).goto(self.SET_STEP_LO)
@@ -58,7 +58,7 @@ class MagnetCycling(StateMachine):
         self.SET_STEP_LO.when(lambda: self.powersupply.isMoving() == False and self.is_low_current()).goto(self.WAIT_LO)
 
         # waiting state between two current decreasing state
-        #self.WAIT_STEP_LO.set_action(step_wait)
+        # self.WAIT_STEP_LO.set_action(step_wait)
         self.WAIT_STEP_LO.when(lambda: time.time() >= self.step_timeout).goto(self.SET_STEP_LO)
 
         # waiting state when current is at minimum value
@@ -73,7 +73,7 @@ class MagnetCycling(StateMachine):
             self.WAIT_HI)
 
         # waiting state between two current increasing state
-        #self.WAIT_STEP_HI.set_action(step_wait)
+        # self.WAIT_STEP_HI.set_action(step_wait)
         self.WAIT_STEP_HI.when(lambda: time.time() >= self.step_timeout).goto(self.SET_STEP_HI)
 
         # waiting state when current is at maximum value
@@ -92,7 +92,7 @@ class MagnetCycling(StateMachine):
             self.DONE)
 
         # waiting state between two current decreasing state
-        #self.WAIT_STEP_NOM_CURRENT.set_action(step_wait)
+        # self.WAIT_STEP_NOM_CURRENT.set_action(step_wait)
         self.WAIT_STEP_NOM_CURRENT.when(lambda: time.time() >= self.step_timeout).goto(self.SET_STEP_NOM_CURRENT)
 
     def set_max_current(self):
@@ -132,8 +132,8 @@ class MagnetCycling(StateMachine):
 
     def ramp_to_max_current(self):
         self.set_step_timeout(self.step_time)
-        current = round(self.current(), 3 )
-        if round(self.current_hi - current, 3 ) >= self.current_step:
+        current = round(self.current(), 3)
+        if round(self.current_hi - current, 3) >= self.current_step:
             self.powersupply.setCurrent(current + self.current_step)
         else:
             self.powersupply.setCurrent(self.current_hi)
@@ -153,13 +153,13 @@ class MagnetCycling(StateMachine):
         current = round(self.current(), 3)
         nom_current = self.get_nom_current()
         if current > self.get_nom_current():
-            if round(current - nom_current,3) > self.current_step:
+            if round(current - nom_current, 3) > self.current_step:
                 self.powersupply.setCurrent(current - self.current_step)
             else:
                 self.powersupply.setCurrent(nom_current)
 
         else:
-            if round(nom_current - current, 3 )  >= self.current_step:
+            if round(nom_current - current, 3) >= self.current_step:
                 self.powersupply.setCurrent(current + self.current_step)
             else:
                 self.powersupply.setCurrent(nom_current)
