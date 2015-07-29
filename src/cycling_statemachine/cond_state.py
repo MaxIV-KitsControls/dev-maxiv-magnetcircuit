@@ -28,7 +28,7 @@ class MagnetCycling(StateMachine):
         self.iterationstatus = " (" + str(self.iterations) + "/" + str(self.interations_max) + ")"
 
         def print_state_change(old, new):
-            print("\t%3.3f: %s -> %s" % (time.time(), old, new))
+            print("\t iter : %d %3.3f: %s -> %s" % (self.iterations,time.time(), old, new))
 
         states = ["INITIALISE",
                   "SET_STEP_LO",
@@ -133,7 +133,7 @@ class MagnetCycling(StateMachine):
     def ramp_to_max_current(self):
         self.set_step_timeout(self.step_time)
         current = round(self.current(), 3)
-        if round(self.current_hi - current, 3) >= self.current_step:
+        if round(self.current_hi - current, 3) > self.current_step:
             self.powersupply.setCurrent(current + self.current_step)
         else:
             self.powersupply.setCurrent(self.current_hi)
@@ -159,7 +159,7 @@ class MagnetCycling(StateMachine):
                 self.powersupply.setCurrent(nom_current)
 
         else:
-            if round(nom_current - current, 3) >= self.current_step:
+            if round(nom_current - current, 3) > self.current_step:
                 self.powersupply.setCurrent(current + self.current_step)
             else:
                 self.powersupply.setCurrent(nom_current)
