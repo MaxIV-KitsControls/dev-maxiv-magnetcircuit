@@ -1,0 +1,70 @@
+{
+    "servers": {
+        "DummyPS/1": {
+            "DummyPS": {
+                "test/dummyps/2": {
+                    "attribute_properties": {
+                        "Current": {
+                            "min_value": ["0"],
+                            "max_value": ["80"]
+                        }
+                    }
+                }
+            }
+	   },
+        "MagnetCircuit/1": {
+            "MagnetCircuit": {
+                "test/magnetcircuit/1": {
+                    "properties": {
+                        "PowerSupplyProxy": [
+                            "test/dummyps/2"
+                        ], 
+                        "ExcitationCurveFields": [
+                            "[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]", 
+                            "[6.3122, 5.677566666666667, 5.065170833333333, 4.421475, 3.8248458333333333, 3.166033333333333, 2.5223416666666663, 1.8918, 1.2811116666666666, 0.6382583333333334, 0.0]"
+                        ], 
+                        "ExcitationCurveCurrents": [
+                            "[0, 0, 0, 0, 0, 0]", 
+                            "[84.92513285763886, 77.209828375, 57.897180034722226, 38.59438736458333, 19.29010506111111, 0.0]"
+                        ], 
+                        "MagnetProxies": [
+                            "test/magnet/1"
+                        ]
+                    }
+                }
+            }
+        },
+        "Magnet/1": {
+            "Magnet": {
+                "test/magnet/1": {
+                    "properties": {
+                        "Polarity": [
+                            "1"
+                        ], 
+                        "Orientation": [
+                            "1"
+                        ], 
+                        "Tilt": [
+                            "90"
+                        ], 
+                        "Length": [
+                            "0.20424"
+                        ], 
+                        "ExcitationCurveCurrents": [
+                            "[2.1.0]"
+                        ], 
+                        "ExcitationCurveFields": [
+                            "[2.1.0]"
+                        ], 
+                        "Type": [
+                            "vkick"
+                        ], 
+                        "CircuitProxies": [
+                            "test/magnetcircuit/1"
+                        ]
+                    }
+                }
+            }
+        }
+    }
+}

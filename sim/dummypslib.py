@@ -59,9 +59,9 @@ class DummyPSLib:
         init = self.current
         #self._prog.append(ramp(init, data, 20))
         if len(self._prog)==0:
-            self._prog.append(ramp(init, data, 20))
+            self._prog.append(ramp(init, data, 3))
         else:
-            self._prog[0]=ramp(init, data, 20)
+            self._prog[0]=ramp(init, data, 3)
 
     def getVoltage(self):
         #        print "getvoltage", len(self._prog)
