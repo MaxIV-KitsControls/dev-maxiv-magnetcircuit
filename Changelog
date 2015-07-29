@@ -133,3 +133,8 @@
 15-07-2015 Vincent Hardion
 	* Fix typo in trim circuit
 	* v1.5.2
+
+29-07-2015 Paul Bell
+	* Fix typo in handling of SKEW_QUADRUPOLE mode
+	* Many changes from AD for the cycling
+	* v1.6.3

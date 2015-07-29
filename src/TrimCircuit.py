@@ -598,10 +598,11 @@ class TrimCircuit (PyTango.Device_4Impl):
             sign = -1
             if self.allowed_component == 0 and self.Mode not in ["vkick","Y_CORRECTOR"]:
                 sign =  1
-            if self.Tilt == 0 and self.Mode != "Y_CORRECTOR":
+            if self.Mode not in ["SKEW_QUADRUPOLE","Y_CORRECTOR"]:
                 self.fieldB[self.allowed_component]  = self.MainFieldComponent_r * self.BRho * sign
             else:
                 self.fieldA[self.allowed_component]  = self.MainFieldComponent_r * self.BRho * sign
+
             self.set_current \
                 = calculate_current(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.fieldA, self.fieldB, False)
             ###########################################################
@@ -646,7 +647,7 @@ class TrimCircuit (PyTango.Device_4Impl):
         sign = -1
         if self.allowed_component == 0 and self.Mode not in ["vkick","Y_CORRECTOR"]:
             sign =  1
-        if self.Tilt == 0 and self.Mode != "Y_CORRECTOR":
+        if self.Mode not in ["SKEW_QUADRUPOLE","Y_CORRECTOR"]:
             self.fieldB[self.allowed_component]  = self.MainFieldComponent_w * self.BRho * sign
         else:
             self.fieldA[self.allowed_component]  = self.MainFieldComponent_w * self.BRho * sign
