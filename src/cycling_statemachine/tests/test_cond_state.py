@@ -17,8 +17,9 @@ ITERATIONS = 3
 
 RAMP_TIME = 10.# s
 STEPS = 10
-STEP_TIME = RAMP_TIME /STEPS  # s
+STEP_TIME = RAMP_TIME /(STEPS -1) # s
 STEP_CURRENT = round((CURRENT_HI - CURRENT_LO) / STEPS, 3)
+
 
 
 class MagnetCyclingStateMachineTestCase(unittest.TestCase):
