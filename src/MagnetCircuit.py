@@ -952,7 +952,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
              {
                  'label': "Cycling Ramp Time",
                  'unit': "s",
-                 'format': "%6.6f",
+                 'format': "%6.1f",
                  'doc': "Time to increase or decrease current to min/max value"
              }],
 
@@ -983,7 +983,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
              {
                  'label': "Cycling Wait Plateau",
                  'unit': "s",
-                 'format': "%6.6f",
+                 'format': "%6.1f",
                  'doc': "Waiting time at maximum and minimum current"
              }],
 
