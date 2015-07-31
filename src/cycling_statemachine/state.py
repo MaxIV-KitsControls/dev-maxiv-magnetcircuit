@@ -122,6 +122,9 @@ class State(object):
         self.action = action and partial(action, *args, **kwargs)
         return self
 
+    def set_recurring_action(self, action, *args, **kwargs):
+        self.recurring_action = action and partial(action, *args, **kwargs)
+        return self
 
 class StateMachine(object):
 
