@@ -1,12 +1,27 @@
-import time
-from threading import Thread, Semaphore, Event
-from threading import Lock
+from contextlib import contextmanager
+from timeit import default_timer as time
+
+from threading import Thread, Event
 from time import sleep
 from cond_state import MagnetCycling as ConditioningState
 
 
+
+# Tick context
+@contextmanager
+def tick_context(value, sleep=sleep):
+    """Generate a context that controls the duration of its execution."""
+    start = time()
+    yield
+    sleep_time = start + value - time()
+    if sleep_time > 0:
+        sleep(sleep_time)
+
+
+
 class MagnetCycling(object):
-    def __init__(self, powersupply, hicurrent, locurrent, wait, iterations, current_step, ramp_time, steps,current_nom_percentage=0.9):
+    def __init__(self, powersupply, hicurrent, locurrent, wait, iterations, current_step, ramp_time, steps,
+                 current_nom_percentage=0.9):
         self.ps = powersupply
         # Conditions
         self.hicurrent_set_point = hicurrent
@@ -49,7 +64,8 @@ class MagnetCycling(object):
             self.current_step,
             self.ramp_time,
             self.steps,
-            self.current_nom_percentage)
+            self.current_nom_percentage,
+            event=self.cycling_stop)
         self.cycling_thread = Thread(target=self.ramp)
         self.cycling_thread.start()
 
@@ -67,10 +83,9 @@ class MagnetCycling(object):
             return "NOT CYCLING (limits are %s %s A)" % (self.locurrent_set_point, self.hicurrent_set_point)
         return (self.statemachine.state + self.statemachine.iterationstatus)
 
-    def ramp(self, dt=0.1):
+    def ramp(self, dt=0.001):
         """The main loop for one cycling run."""
         while not (self.statemachine.finished or self.cycling_stop.isSet()):
-            self.statemachine.proceed()
-            self.cycling_stop.wait(dt)  # Defines the period of the loop
+            with tick_context(dt, sleep=self.cycling_stop.wait):
+                self.statemachine.proceed()
         self.statemachine = None
-
