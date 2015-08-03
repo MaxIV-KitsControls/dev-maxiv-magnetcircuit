@@ -12,7 +12,6 @@ class DummyPS:
     def setCurrent(self,data):
         self.moving = True
         self.current = data
-        self.moving = False
 
     def isMoving(self):
         return self.moving
