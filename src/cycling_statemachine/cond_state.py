@@ -38,10 +38,9 @@ class MagnetCycling(StateMachine):
                   "SET_STEP_HI",
                   "WAIT_HI",
                   "SET_STEP_NOM_CURRENT",
-                  "WAIT_STEP_NOM_CURRENT",
                   "DONE"]
 
-        StateMachine.__init__(self, states, on_state_change=print_state_change)
+        StateMachine.__init__(self, states)
 
         self.INITIALISE.when(lambda: self.powersupply.isOn()).goto(self.SET_STEP_LO)
 
