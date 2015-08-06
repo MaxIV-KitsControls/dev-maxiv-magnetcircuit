@@ -420,6 +420,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
     #
     def dev_state(self):
         self.debug_stream("In dev_state()")
+        result = PyTango.DevState.UNKNOWN
 
         # Check state of PS
         ps_state = self.get_ps_state()
@@ -437,9 +438,13 @@ class MagnetCircuit(PyTango.Device_4Impl):
         # If we are in RUNNING, ie cycling, stay there unless ps goes to fault
         self.check_cycling_state()
         if self.iscycling == True and ps_state in [PyTango.DevState.ON, PyTango.DevState.MOVING]:
-            return PyTango.DevState.RUNNING
+            result = PyTango.DevState.RUNNING
+
         else:
-            return ps_state
+            result = ps_state
+
+        self.set_state(result)
+        return result
 
     def check_cycling_state(self):
         # see if reached end of cycle
@@ -702,6 +707,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
         attr.set_value(self._cycler.ramp_time)
 
     def is_CyclingRampTime_allowed(self, attr):
+        self.check_cycling_state()
         if attr == PyTango.AttReqType.WRITE_REQ:
             return self._cycler and not self.iscycling
         else:
@@ -716,6 +722,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
         attr.set_value(self._cycler.iterations)
 
     def is_CyclingIterations_allowed(self, attr):
+        self.check_cycling_state()
         if attr == PyTango.AttReqType.WRITE_REQ:
             return self._cycler and not self.iscycling
         else:
@@ -730,6 +737,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
         attr.set_value(self._cycler.wait_time)
 
     def is_CyclingTimePlateau_allowed(self, attr):
+        self.check_cycling_state()
         if attr == PyTango.AttReqType.WRITE_REQ:
             return self._cycler and not self.iscycling
         else:
@@ -750,6 +758,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self._cycler.current_nom_percentage = attr.get_write_value()
 
     def is_NominalCurrentPercentage_allowed(self, attr):
+        self.check_cycling_state()
         if attr == PyTango.AttReqType.WRITE_REQ:
             return self._cycler and not self.iscycling
         else:
@@ -765,6 +774,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self._cycler.steps = attr.get_write_value()
 
     def is_CyclingSteps_allowed(self, attr):
+        self.check_cycling_state()
         if attr == PyTango.AttReqType.WRITE_REQ:
             return self._cycler and not self.iscycling
         else:
@@ -788,10 +798,12 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.iscycling = False
 
     def is_StartCycle_allowed(self):
+        self.check_cycling_state()
         allowed = self._cycler is not None and not self.iscycling
         return allowed
 
     def is_StopCycle_allowed(self):
+        self.check_cycling_state()
         if self.iscycling:
             return True
         else:
