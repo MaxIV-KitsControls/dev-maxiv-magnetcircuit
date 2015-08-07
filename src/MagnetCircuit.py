@@ -743,12 +743,6 @@ class MagnetCircuit(PyTango.Device_4Impl):
         else:
             return bool(self._cycler)
 
-
-
-
-
-
-
     def read_NominalCurrentPercentage(self, attr):
         self.debug_stream("In read_NominalCurrentPercentage()")
         attr.set_value(self._cycler.current_nom_percentage)
@@ -799,7 +793,10 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
     def is_StartCycle_allowed(self):
         self.check_cycling_state()
+        ps_state_on  = self.get_ps_state() in [PyTango.DevState.ON ,
+                                               PyTango.DevState.MOVING]
         allowed = self._cycler is not None and not self.iscycling
+        allowed = allowed and ps_state_on
         return allowed
 
     def is_StopCycle_allowed(self):

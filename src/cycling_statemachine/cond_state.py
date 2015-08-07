@@ -3,6 +3,7 @@ import time
 from functools import partial
 from state import StateMachine
 
+POWER_SUPPLY_IS_ON_SLEEP = 10 # s
 
 class MagnetCycling(StateMachine):
     def __init__(self, powersupply,
@@ -42,7 +43,7 @@ class MagnetCycling(StateMachine):
 
         StateMachine.__init__(self, states)
 
-        self.INITIALISE.when(lambda: self.powersupply.isOn()).goto(self.SET_STEP_LO)
+        self.INITIALISE.when(self.check_power_supply_state).goto(self.SET_STEP_LO)
 
         # decrease current by step
         self.SET_STEP_LO.set_action(self.init_ramp_to_min_current)
@@ -69,6 +70,16 @@ class MagnetCycling(StateMachine):
         self.SET_STEP_NOM_CURRENT.set_recurring_action(self.ramp_to_nom_current)
         self.SET_STEP_NOM_CURRENT.when(partial(self.is_step_finished, lambda: not self.powersupply.isMoving()  and not self.is_nom_current())).goto(self.SET_STEP_NOM_CURRENT)
         self.SET_STEP_NOM_CURRENT.when(partial(self.is_step_finished, lambda: not self.powersupply.isMoving() and self.is_nom_current())).goto(self.DONE)
+
+
+    def check_power_supply_state(self):
+        print self.powersupply.isOn()
+        ps_is_on = self.powersupply.isOn()
+        if ps_is_on == False:
+            self.sleep(POWER_SUPPLY_IS_ON_SLEEP)
+        return ps_is_on
+
+
 
     def is_step_finished(self, action):
         return not self.is_interupted() and action()
