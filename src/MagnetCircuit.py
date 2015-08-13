@@ -775,6 +775,16 @@ class MagnetCircuit(PyTango.Device_4Impl):
             return bool(self._cycler)
 
 
+    def read_MaxCurrent(self, attr):
+        if not self.maxcurrent :
+            self.set_current_limits()
+        attr.set_value(self.maxcurrent)
+
+
+    def read_MinCurrent(self, attr):
+        if not self.mincurrent :
+            self.set_current_limits()
+        attr.set_value(self.mincurrent)
 
 
     # -----------------------------------------------------------------------------
@@ -857,7 +867,9 @@ class MagnetCircuitClass(PyTango.DeviceClass):
                  'label': "set current",
                  'unit': "A",
                  'doc': "Set current on PS (attribute write value)",
+                 'Display level': PyTango.DispLevel.EXPERT,
                  'format': "%6.5f"
+
              }],
         'currentActual':
             [[PyTango.DevFloat,
@@ -867,8 +879,34 @@ class MagnetCircuitClass(PyTango.DeviceClass):
                  'label': "actual current",
                  'unit': "A",
                  'doc': "Read current on PS",
+                 'Display level': PyTango.DispLevel.EXPERT,
                  'format': "%6.5f"
              }],
+
+         'MaxCurrent':
+            [[PyTango.DevFloat,
+              PyTango.SCALAR,
+              PyTango.READ],
+             {
+                 'label': "maximal current",
+                 'unit': "A",
+                 'doc': "Maximal current on PS",
+                 'Display level': PyTango.DispLevel.EXPERT,
+                 'format': "%6.5f"
+             }],
+
+         'MinCurrent':
+            [[PyTango.DevFloat,
+              PyTango.SCALAR,
+              PyTango.READ],
+             {
+                 'label': "minimal current",
+                 'unit': "A",
+                 'doc': "Minimal current on PS",
+                 'Display level': PyTango.DispLevel.EXPERT,
+                 'format': "%6.5f"
+             }],
+
         'fieldA':
             [[PyTango.DevFloat,
               PyTango.SPECTRUM,
