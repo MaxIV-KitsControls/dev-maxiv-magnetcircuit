@@ -139,7 +139,7 @@ class MagnetCircuitTestCase(DeviceTestCase):
         self.device.StartCycle()
         with self.assertRaises(PyTango.DevFailed) as context:
             write_attribute(other_value)
-        expected_message = "It is currently not allowed to write attribute %s. The device state is UNKNOWN" % (attribute_name)
+        expected_message = "It is currently not allowed to write attribute %s. The device state is ON" % (attribute_name)
         self.assertIn(expected_message, str(context.exception))
         read = read_attribute()
         self.assertEqual(read, set_value,
