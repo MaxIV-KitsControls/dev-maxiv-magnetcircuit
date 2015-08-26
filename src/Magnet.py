@@ -99,15 +99,15 @@ class Magnet (PyTango.Device_4Impl):
         self.configure_type()
 
         if self.is_voltage_controlled:
-            self.excitation_set_point = self.ExcitationCurveVoltages
+            self.excitation_curve = self.ExcitationCurveVoltages
             self.physical_quantity_controlled = "voltage"
         else :
-            self.excitation_set_point = self.ExcitationCurveCurrents
+            self.excitation_curve = self.ExcitationCurveCurrents
 
         # TODO : check if calibration data is the same formula for voltage and current
         #process the calibration data into useful numpy arrays 
-        (self.hasCalibData, self.status_str_cfg,  self.fieldsmatrix,  self.setpointsmatrix) \
-            = process_calibration_data(self.excitation_set_point,self.ExcitationCurveFields, self.allowed_component)
+        (self.hasCalibData, self.status_str_cfg,  self.fieldsmatrix,  self.physicalmatrix) \
+            = process_calibration_data(self.excitation_curve,self.ExcitationCurveFields, self.allowed_component)
 
         #option to disable use of trim coils
         self.applyTrim = False
@@ -261,7 +261,7 @@ class Magnet (PyTango.Device_4Impl):
             else:
                 # TODO differentiate voltage calculate to current (ex calculate_fields(...., is_voltage_controlled = self.is_voltage_controlled )
                 (success, MainFieldComponent_r, MainFieldComponent_w, self.fieldA_main, self.fieldANormalised_main, self.fieldB_main, self.fieldBNormalised_main) \
-                    = calculate_fields(self.allowed_component, self.setpointsmatrix, self.fieldsmatrix, BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length, physical_quantity, None, self.is_sole)
+                    = calculate_fields(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length, physical_quantity, None, self.is_sole)
 
                 self.field_out_of_range = False
                 if success==False:
