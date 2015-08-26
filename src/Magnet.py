@@ -69,6 +69,10 @@ class Magnet (PyTango.Device_4Impl):
         self.is_sole = False #hack for solenoids until configured properly
         self.field_out_of_range = False
 
+        # boolean if magnet is controlled by voltage
+        self.is_voltage_controlled = False
+        self.physical_quantity_controlled = "current"
+
         #get trim and main coil proxies
         self._main_circuit_device = None
         self._trim_circuit_device = None
@@ -94,9 +98,16 @@ class Magnet (PyTango.Device_4Impl):
         self.allowed_component = 0
         self.configure_type()
 
+        if self.is_voltage_controlled:
+            self.excitation_set_point = self.ExcitationCurveVoltages
+            self.physical_quantity_controlled = "voltage"
+        else :
+            self.excitation_set_point = self.ExcitationCurveCurrents
+
+        # TODO : check if calibration data is the same formula for voltage and current
         #process the calibration data into useful numpy arrays 
-        (self.hasCalibData, self.status_str_cfg,  self.fieldsmatrix,  self.currentsmatrix) \
-            = process_calibration_data(self.ExcitationCurveCurrents,self.ExcitationCurveFields, self.allowed_component)
+        (self.hasCalibData, self.status_str_cfg,  self.fieldsmatrix,  self.setpointsmatrix) \
+            = process_calibration_data(self.excitation_set_point,self.ExcitationCurveFields, self.allowed_component)
 
         #option to disable use of trim coils
         self.applyTrim = False
@@ -172,7 +183,6 @@ class Magnet (PyTango.Device_4Impl):
     ###############################################################################
     #
     def configure_type(self):
-            
         if self.Type == "kquad":
             self.allowed_component = 1
         elif self.Type == "ksext":
@@ -235,27 +245,27 @@ class Magnet (PyTango.Device_4Impl):
 
     ###############################################################################
     #
-    def get_main_current_and_field(self):
-
-        self.debug_stream("In get_main_current_and_field()")
+    def get_main_physical_quantity_and_field(self):
+        self.debug_stream("In get_main_physical_quantity_and_field()")
         if self.main_circuit_device:
-            try:        
-                #This does not work!: Current_BRho = self.main_circuit_device.read_attributes(["Current","BRho"])
-                self.debug_stream("Will read current from main circuit")
-                Current = self.main_circuit_device.currentActual
+            try:
+                self.debug_stream("Will read {0} from main circuit".format(self.physical_quantity_controlled))
+                physical_quantity = self.main_circuit_device.PhysicalQuantityActual
                 self.debug_stream("Will read BRho from main circuit")
-                BRho = self.main_circuit_device.BRho  
+                BRho = self.main_circuit_device.BRho
                 self.status_str_b = ""
+
             except (AttributeError, PyTango.DevFailed) as e:
-                self.debug_stream("Cannot get state or current from circuit device " + self.MainCoil)
-                return False            
+                self.debug_stream("Cannot get state or {0} from circuit device {1}".format(self.physical_quantity_controlled,  self.MainCoil))
+                return False
             else:
+                # TODO differentiate voltage calculate to current (ex calculate_fields(...., is_voltage_controlled = self.is_voltage_controlled )
                 (success, MainFieldComponent_r, MainFieldComponent_w, self.fieldA_main, self.fieldANormalised_main, self.fieldB_main, self.fieldBNormalised_main) \
-                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length, Current, None, self.is_sole)
+                    = calculate_fields(self.allowed_component, self.setpointsmatrix, self.fieldsmatrix, BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length, physical_quantity, None, self.is_sole)
 
                 self.field_out_of_range = False
                 if success==False:
-                    self.status_str_b = "Cannot interpolate read current %f " % (Current)
+                    self.status_str_b = "Cannot interpolate read {0} {1}".format(self.physical_quantity_controlled, physical_quantity)
                     self.field_out_of_range = True
                 return True
         else:
@@ -344,7 +354,7 @@ class Magnet (PyTango.Device_4Impl):
      
     def is_fieldA_allowed(self, attr):
         self.debug_stream("In is_fieldA_allowed()")
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_current_and_field() and not self.field_out_of_range
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
@@ -369,7 +379,7 @@ class Magnet (PyTango.Device_4Impl):
      
     def is_fieldANormalised_allowed(self, attr):
         self.debug_stream("In is_fieldANormalised_allowed()")
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_current_and_field() and not self.field_out_of_range
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
@@ -394,7 +404,7 @@ class Magnet (PyTango.Device_4Impl):
      
     def is_fieldB_allowed(self, attr):
         self.debug_stream("In is_fieldB_allowed()")
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_current_and_field() and not self.field_out_of_range
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
@@ -419,7 +429,7 @@ class Magnet (PyTango.Device_4Impl):
      
     def is_fieldBNormalised_allowed(self, attr):
         self.debug_stream("In is_fieldBNormalised_allowed()")
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_current_and_field() and not self.field_out_of_range
+        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
@@ -486,6 +496,10 @@ class MagnetClass(PyTango.DeviceClass):
         'ExcitationCurveCurrents':
         [PyTango.DevVarStringArray,
          "Measured calibration currents for each multipole",
+         [ ] ],
+        'ExcitationCurveVoltages':
+        [PyTango.DevVarStringArray,
+         "Measured calibration voltages for each multipole",
          [ ] ],
         'ExcitationCurveFields':
         [PyTango.DevVarStringArray,
