@@ -18,20 +18,19 @@ def tick_context(value, sleep=sleep):
         sleep(sleep_time)
 
 
-
 class MagnetCycling(object):
-    def __init__(self, powersupply, hicurrent, locurrent, wait, iterations, current_step, ramp_time, steps,
-                 current_nom_percentage=0.9):
+    def __init__(self, powersupply, hi_setpoint, lo_setpoint, wait, iterations, ramp_time, steps,
+                 nominal_setpoint_percentage=0.9, unit="A"):
         self.ps = powersupply
         # Conditions
-        self.hicurrent_set_point = hicurrent
-        self.locurrent_set_point = locurrent
-        self.current_nom_percentage = current_nom_percentage
+        self.hi_set_point = hi_setpoint
+        self.lo_set_point = lo_setpoint
+        self.nominal_setpoint_percentage = nominal_setpoint_percentage
         self.wait_time = wait
         self.iterations = iterations
-        self.current_step = current_step
         self.ramp_time = ramp_time
         self.steps = steps
+        self.unit = unit
         # States
         self._conditioning = False
         # Cycling
@@ -56,15 +55,14 @@ class MagnetCycling(object):
         # Start the ramping
         self.cycling_stop.clear()
         self.statemachine = ConditioningState(
-            self.ps,
-            self.hicurrent_set_point,
-            self.locurrent_set_point,
-            self.wait_time,
-            self.iterations,
-            self.current_step,
-            self.ramp_time,
-            self.steps,
-            self.current_nom_percentage,
+            powersupply=self.ps,
+            hi_setpoint=self.hi_set_point,
+            lo_setpoint=self.lo_set_point,
+            wait=self.wait_time,
+            iterations_max=self.iterations,
+            ramp_time=self.ramp_time,
+            steps=self.steps,
+            nominal_setpoint_percentage=self.nominal_setpoint_percentage,
             event=self.cycling_stop)
         self.cycling_thread = Thread(target=self.ramp)
         self.cycling_thread.start()
@@ -80,7 +78,7 @@ class MagnetCycling(object):
     def phase(self):
         """Get the 'phase' of the conditioning; a high-level state"""
         if not self.statemachine:
-            return "NOT CYCLING (limits are %s %s A)" % (self.locurrent_set_point, self.hicurrent_set_point)
+            return "NOT CYCLING (limits are %s %s %s)" % (self.lo_set_point, self.hi_set_point, self.unit)
         return (self.statemachine.state + self.statemachine.iterationstatus)
 
     def ramp(self, dt=0.001):
