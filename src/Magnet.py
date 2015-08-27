@@ -194,6 +194,9 @@ class Magnet (PyTango.Device_4Impl):
         elif self.Type == "sole":
             self.allowed_component = 0
             self.is_sole = True
+        elif self.Type == "bumper":
+            self.allowed_component = 0
+            self.is_voltage_controlled = True
         else:
             self.status_str_cfg = 'Magnet type invalid %s' % self.Type
             self.debug_stream(self.status_str_cfg)
@@ -250,7 +253,7 @@ class Magnet (PyTango.Device_4Impl):
         if self.main_circuit_device:
             try:
                 self.debug_stream("Will read {0} from main circuit".format(self.physical_quantity_controlled))
-                physical_quantity = self.main_circuit_device.PhysicalQuantityActual
+                physical_quantity = self.main_circuit_device.MeasurementValue
                 self.debug_stream("Will read BRho from main circuit")
                 BRho = self.main_circuit_device.BRho
                 self.status_str_b = ""
@@ -354,6 +357,9 @@ class Magnet (PyTango.Device_4Impl):
      
     def is_fieldA_allowed(self, attr):
         self.debug_stream("In is_fieldA_allowed()")
+        print "self.hasCalibData" , self.hasCalibData
+        print "self.get_main_physical_quantity_and_field()" , self.get_main_physical_quantity_and_field()
+        print "not self.field_out_of_range", not self.field_out_of_range
         return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #

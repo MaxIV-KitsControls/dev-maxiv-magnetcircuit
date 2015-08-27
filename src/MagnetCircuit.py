@@ -33,21 +33,21 @@ from magnetcircuitlib import calculate_fields, calculate_current
 from cycling_statemachine.magnetcycling import MagnetCycling
 from processcalibrationlib import process_calibration_data
 
+
+
 # This power supply object is used by the cycling machine
 #
 class Wrapped_PS_Device(object):
     # pass ps device
-    def __init__(self, psdev):
+    def __init__(self, psdev, attr_name):
+        self.attr = attr_name
         self.psdev = psdev
 
-    def setCurrent(self, value):
-        self.psdev.write_attribute("Current", value)
+    def setValue(self, value):
+        self.psdev.write_attribute(self.attr, value)
 
-    def getCurrent(self):
-        return self.psdev.read_attribute("Current").w_value
-
-    # def getCurrent(self):
-    #    return self.psdev.read_attribute("Current").w_value
+    def getValue(self):
+        return self.psdev.read_attribute(self.attr).w_value
 
     def isOn(self):
         if self.psdev.state() in [PyTango.DevState.ON]:
@@ -66,7 +66,8 @@ class Wrapped_PS_Device(object):
 #
 class MagnetCircuit(PyTango.Device_4Impl):
     _maxdim = 10  # Maximum number of multipole components
-    _default_current_step = 1.  # default value of cycling current step
+    _default_iteration = 4
+    _default_wait = 5.0
     _default_ramp_time = 10.  # default value of cycling waiting step
     _default_steps = 4
 
@@ -116,8 +117,9 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
         # Proxy to power supply device
         self._ps_device = None
-        self.actual_current = None
-        self.set_current = None
+        self.actual_measurement = None  # read value from the power supply (can be voltage or current)
+        self.set_point = None  # set point for the ps (current or voltage)
+        self.is_voltage_controlled = False  # define if magnet are controlled by voltage
 
         # read the properties from the Tango DB, including calib data (type, length, powersupply proxy...)
         self.PolTimesOrient = 1  # always one for circuit
@@ -125,7 +127,9 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.Length = 0
         self.Type = ""
         self.hasCalibData = False
-        magnet_properties_ok = self.read_magnet_properties()  # this is reading properties from the magnet, not the circuit!
+        magnet_properties_ok = self.read_magnet_properties()  # this is reading properties from the magnet,
+        # not the circuit!
+
 
         #
         # The magnet type determines the allowed field component to be controlled.
@@ -135,14 +139,25 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.allowed_component = 0
         config_type_ok = self.config_type()
 
+
+        # if magnet are controlled by voltage, we need to measure and set Voltage value on the ps
+        if self.is_voltage_controlled:
+            self.ps_attribute = "voltage"
+            self.ps_unit = 'V'
+            self.excitation_curve = self.ExcitationCurveVoltages
+        else:
+            self.ps_attribute = "Current"
+            self.ps_unit = 'A'
+            self.excitation_curve = self.ExcitationCurveCurrents
+
         # process the calibration data into useful numpy arrays
         if magnet_properties_ok and config_type_ok:
-            (self.hasCalibData, self.status_str_cal, self.fieldsmatrix, self.currentsmatrix) \
-                = process_calibration_data(self.ExcitationCurveCurrents, self.ExcitationCurveFields,
+            (self.hasCalibData, self.status_str_cal, self.fieldsmatrix, self.physicalmatrix) \
+                = process_calibration_data(self.excitation_curve, self.ExcitationCurveFields,
                                            self.allowed_component)
 
-        # set limits on current
-        self.set_current_limits()
+        # set limits on set point
+        self.set_point_limits()
 
         # set alarm levels on MainFieldComponent (etc) corresponding to the PS alarms
         if self.hasCalibData:
@@ -155,7 +170,8 @@ class MagnetCircuit(PyTango.Device_4Impl):
     ###############################################################################
     #
     def calculate_brho(self):
-        # Bρ = sqrt(T(T+2M0)/(qc0) where M0 = rest mass of the electron in MeV, q = 1 and c0 = speed of light Mm/s (mega m!) Energy is in eV to start.
+        # Bρ = sqrt(T(T+2M0)/(qc0) where M0 = rest mass of the electron in MeV, q = 1 and c0 = speed of light Mm/s (
+        # mega m!) Energy is in eV to start.
         self.BRho = sqrt(self.energy_r / 1000000.0 * (self.energy_r / 1000000.0 + (2 * 0.510998910))) / (299.792458)
 
     ###############################################################################
@@ -218,12 +234,15 @@ class MagnetCircuit(PyTango.Device_4Impl):
         att_vc = self.get_device_attr().get_attr_by_name("MainFieldComponent")
         multi_prop_vc = PyTango.MultiAttrProp()
         att_vc.get_properties(multi_prop_vc)
-        multi_prop_vc.description = "The variable component of the field, which depends on the magnet type (k2 for sextupoles, k1 for quads, Theta for dipoles, theta for correctors, B_s for solenoids)"
+        multi_prop_vc.description = "The variable component of the field, which depends on the magnet type (k2 for " \
+                                    "sextupoles, k1 for quads, Theta for dipoles, theta for correctors, " \
+                                    "B_s for solenoids)"
 
         att_ivc = self.get_device_attr().get_attr_by_name("IntMainFieldComponent")
         multi_prop_ivc = PyTango.MultiAttrProp()
         att_ivc.get_properties(multi_prop_ivc)
-        multi_prop_ivc.description = "The length integrated variable component of the field for quadrupoles and sextupoles (k2*l for sextupoles, k1*l for quads)."
+        multi_prop_ivc.description = "The length integrated variable component of the field for quadrupoles and " \
+                                     "sextupoles (k2*l for sextupoles, k1*l for quads)."
 
         if self.Type == "kquad":
             self.allowed_component = 1
@@ -272,6 +291,14 @@ class MagnetCircuit(PyTango.Device_4Impl):
             multi_prop_ivc.description = ""
             self.IntFieldQ = PyTango.AttrQuality.ATTR_INVALID
             self.is_sole = True
+        elif self.Type == "bumper":
+            self.allowed_component = 0
+            multi_prop_vc.unit = "rad"
+            multi_prop_vc.label = "theta"
+            multi_prop_ivc.unit = "rad m"
+            multi_prop_ivc.label = "length integrated theta"
+            self.is_voltage_controlled = True
+
         else:
             self.status_str_cfg = 'Magnet type invalid %s' % self.Type
             self.debug_stream(self.status_str_cfg)
@@ -279,51 +306,82 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
         att_vc.set_properties(multi_prop_vc)
         att_ivc.set_properties(multi_prop_ivc)
+
+        print self.is_voltage_controlled, self.Type
+        unit = "A"
+        if self.is_voltage_controlled:
+            unit = "V"
+
+        att_sp = self.get_device_attr().get_attr_by_name("SetPoint")
+        multi_prop_sp = PyTango.MultiAttrProp()
+        att_sp.get_properties(multi_prop_sp)
+
+        att_mv = self.get_device_attr().get_attr_by_name("MeasurementValue")
+        multi_prop_mv = PyTango.MultiAttrProp()
+        att_mv.get_properties(multi_prop_mv)
+
+        att_max_sp = self.get_device_attr().get_attr_by_name("MaxSetPointValue")
+        multi_prop_max_sp = PyTango.MultiAttrProp()
+        att_max_sp.get_properties(multi_prop_max_sp)
+
+        att_min_sp = self.get_device_attr().get_attr_by_name("MinSetPointValue")
+        multi_prop_min_sp = PyTango.MultiAttrProp()
+        att_min_sp.get_properties(multi_prop_min_sp)
+
+        multi_prop_sp.unit = unit
+        multi_prop_mv.unit = unit
+        multi_prop_max_sp.unit = unit
+        multi_prop_min_sp.unit = unit
+
+        att_sp.set_properties(multi_prop_sp)
+        att_mv.set_properties(multi_prop_mv)
+        att_max_sp.set_properties(multi_prop_max_sp)
+        att_min_sp.set_properties(multi_prop_min_sp)
+
         return True
 
     ##############################################################################################################
     #
-    def set_current_limits(self):
+    def set_point_limits(self):
 
-        self.mincurrent = self.maxcurrent = None
+        self.min_setpoint_value = self.max_setpoint_value = None
         try:
 
-            maxcurrent_s = self.ps_device.get_attribute_config("Current").max_value
-            mincurrent_s = self.ps_device.get_attribute_config("Current").min_value
+            max_setpoint_s = self.ps_device.get_attribute_config(self.ps_attribute).max_value
+            min_setpoint_s = self.ps_device.get_attribute_config(self.ps_attribute).min_value
 
-            if maxcurrent_s == 'Not specified' or mincurrent_s == 'Not specified':
+            if max_setpoint_s == 'Not specified' or min_setpoint_s == 'Not specified':
                 self.debug_stream(
-                    "Current limits not specified, cannot do cycling")  # ! We assume if there are limits then they are good!
+                    "{0} limits not specified, cannot do cycling".format(
+                        self.ps_attribute))  # ! We assume if there are limits then they
+                # are good!
 
             else:
-                self.maxcurrent = float(maxcurrent_s)
-                self.mincurrent = float(mincurrent_s)
+                self.max_setpoint_value = float(max_setpoint_s)
+                self.min_setpoint_value = float(min_setpoint_s)
 
         except (AttributeError, PyTango.DevFailed):
-            self.debug_stream("Cannot read current limits from PS " + self.PowerSupplyProxy)
+            self.debug_stream("Cannot read {0} limits from PS {1}".format(self.ps_attribute, self.PowerSupplyProxy))
 
     ##############################################################################################################
     #
     def set_field_limits(self):
 
-        if self.maxcurrent != None and self.mincurrent != None:
+        if self.max_setpoint_value != None and self.min_setpoint_value != None:
 
             # Set the limits on the variable component (k1 etc) which will change if the energy changes
             att = self.get_device_attr().get_attr_by_name("MainFieldComponent")
             multi_prop = PyTango.MultiAttrProp()
             att.get_properties(multi_prop)
-
+            # TODO calculate field
             minMainFieldComponent = \
-                calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,
-                                 self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.mincurrent,
+                calculate_fields(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, self.BRho,
+                                 self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.min_setpoint_value,
                                  is_sole=self.is_sole, find_limit=True)[1]
             maxMainFieldComponent = \
-                calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,
-                                 self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.maxcurrent,
+                calculate_fields(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, self.BRho,
+                                 self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.max_setpoint_value,
                                  is_sole=self.is_sole, find_limit=True)[1]
-
-            # print "calc min  limit for ", self.mincurrent, minMainFieldComponent
-            # print "calc max  limit for ", self.maxcurrent, maxMainFieldComponent
 
             if minMainFieldComponent < maxMainFieldComponent:
                 multi_prop.min_value = minMainFieldComponent
@@ -340,18 +398,25 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
         self.status_str_cyc = ""
 
-        # The cycling varies the current from min and max a number of times.
-        # Need to get the current limits from the PS device; number of iterations and wait time can be properties
+        # The cycling varies the ps from min and max a number of times.
+        # Need to get the set point limits from the PS device; number of iterations and wait time can be properties
 
-        if self.maxcurrent == None or self.mincurrent == None:
-            self.status_str_cyc = 'Setup cycling: cannot read current limits from PS ' + self.PowerSupplyProxy
+        if self.max_setpoint_value == None or self.min_setpoint_value == None:
+            self.status_str_cyc = 'Setup cycling: cannot read {0} limits from PS {1}'.format(self.ps_attribute,
+                                                                                             self.PowerSupplyProxy)
             self.debug_stream(self.status_str_cyc)
             return
 
         if self.ps_device:
-            self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device)
-            self._cycler = MagnetCycling(self.wrapped_ps_device, self.maxcurrent, self.mincurrent, 5.0, 4,
-                                         self._default_current_step, self._default_ramp_time, self._default_steps)
+            self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device, self.ps_attribute)
+            self._cycler = MagnetCycling(powersupply=self.wrapped_ps_device,
+                                         hi_setpoint=self.max_setpoint_value,
+                                         lo_setpoint=self.min_setpoint_value,
+                                         wait=self._default_wait,
+                                         iterations=self._default_iteration,
+                                         ramp_time=self._default_ramp_time,
+                                         steps=self._default_steps,
+                                         unit = self.ps_unit)
         else:
             self.status_str_cyc = "Setup cycling: cannot get proxy to %s " % self.PowerSupplyProxy
 
@@ -380,35 +445,39 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
     ##############################################################################################################
     #
-    def get_current_and_field(self):
 
-        self.debug_stream("In get_current_and_field()")
+
+    def get_main_physical_quantity_and_field(self):
+
+        self.debug_stream("In get_main_physical_quantity_and_field()")
         if self.ps_device:
             try:
-                current_att = self.ps_device.read_attribute("Current")
-                self.actual_current = current_att.value
-                self.set_current = current_att.w_value
+                measurement_attr = self.ps_device.read_attribute(self.ps_attribute)
+                self.actual_measurement = measurement_attr.value
+                self.set_point = measurement_attr.w_value
                 self.status_str_b = ""
-                # Just assume the set current is whatever is written on the ps device (could be written directly there!)
+                # Just assume the set point is whatever is written on the ps device (could be written directly there!)
             except:
-                self.debug_stream("Cannot read current on PS " + self.PowerSupplyProxy)
+                self.debug_stream("Cannot read {0} on PS {1}".format(self.ps_attribute, self.PowerSupplyProxy))
                 return False
             else:
                 # if have calib data calculate the actual and set fields
                 self.field_out_of_range = False
                 if self.hasCalibData:
+                    # TODO calculate field current/voltage
                     (success, self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised,
                      self.fieldB, self.fieldBNormalised) \
-                        = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,
-                                           self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.actual_current,
-                                           self.set_current, is_sole=self.is_sole)
+                        = calculate_fields(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, self.BRho,
+                                           self.PolTimesOrient, self.Tilt, self.Type, self.Length,
+                                           self.actual_measurement,
+                                           self.set_point, is_sole=self.is_sole)
                     if success == False:
-                        self.status_str_b = "Cannot interpolate read/set currents %f/%f " % (
-                            self.actual_current, self.set_current)
+                        self.status_str_b = "Cannot interpolate read/set {0} {1} {2} " % (
+                            self.ps_attribute, self.actual_measurement, self.set_point)
                         self.field_out_of_range = True
                     return True
-                else:  # if not calib data, can read current but not field
-                    self.status_str_b = "Circuit device may only read current"
+                else:  # if not calib data, can read ps value but not field
+                    self.status_str_b = "Circuit device may only read {0}".format(self.ps_attribute)
                     self.field_out_of_range = True
                     return True
 
@@ -427,8 +496,8 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
         # if state ok but cycler not setup, then set it up
         if ps_state == PyTango.DevState.ON and self._cycler == None:
-            # set limits on current
-            self.set_current_limits()
+            # set limits on set point
+            self.set_point_limits()
             # set alarm levels on MainFieldComponent (etc) corresponding to the PS alarms
             if self.hasCalibData:
                 self.set_field_limits()
@@ -466,7 +535,9 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.check_cycling_status()
 
         # set status message
-        msg = self.status_str_prop + "\n" + self.status_str_cfg + "\n" + self.status_str_cal + "\n" + self.status_str_ps + "\n" + self.status_str_b + "\n" + self.status_str_cyc + "\nCycling status: " + self.cyclingphase
+        msg = self.status_str_prop + "\n" + self.status_str_cfg + "\n" + self.status_str_cal + "\n" + \
+              self.status_str_ps + "\n" + self.status_str_b + "\n" + self.status_str_cyc + "\nCycling status: " + \
+              self.cyclingphase
         self.status_str_fin = os.linesep.join([s for s in msg.splitlines() if s])
         return self.status_str_fin
 
@@ -484,15 +555,15 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
     def set_ps_current(self):
         # Set the current on the ps
-        if self.set_current > self.maxcurrent:
-            self.debug_stream("Requested current %f above limit of PS (%f)" % (self.set_current, self.maxcurrent))
-            self.set_current = self.maxcurrent
-        if self.set_current < self.mincurrent:
-            self.debug_stream("Requested current %f below limit of PS (%f)" % (self.set_current, self.mincurrent))
-            self.set_current = self.mincurrent
-        self.debug_stream("SETTING CURRENT ON THE PS TO: %f ", self.set_current)
+        if self.set_point > self.max_setpoint_value:
+            self.debug_stream("Requested current %f above limit of PS (%f)" % (self.set_point, self.max_setpoint_value))
+            self.set_point = self.max_setpoint_value
+        if self.set_point < self.min_setpoint_value:
+            self.debug_stream("Requested current %f below limit of PS (%f)" % (self.set_point, self.min_setpoint_value))
+            self.set_point = self.min_setpoint_value
+        self.debug_stream("SETTING CURRENT ON THE PS TO: %f ", self.set_point)
         try:
-            self.ps_device.write_attribute("Current", self.set_current)
+            self.ps_device.write_attribute(self.ps_attribute, self.set_point)
         except PyTango.DevFailed as e:
             self.status_str_ps = "Cannot set current on PS" + self.PowerSupplyProxy
 
@@ -500,21 +571,19 @@ class MagnetCircuit(PyTango.Device_4Impl):
     #    MagnetCircuit read/write attribute methods
     # -----------------------------------------------------------------------------
 
-    def read_currentSet(self, attr):
-        self.debug_stream("In read_currentSet()")
-        attr.set_value(self.set_current)
+    def read_SetPoint(self, attr):
+        self.debug_stream("In read_SetPoint()")
+        attr.set_value(self.set_point)
 
-    def is_currentSet_allowed(self, attr):
-        return self.get_current_and_field()
+    def is_SetPoint_allowed(self, attr):
+        return self.get_main_physical_quantity_and_field()
 
-        #
+    def read_MeasurementValue(self, attr):
+        self.debug_stream("In read_MeasurementValue()")
+        attr.set_value(self.actual_measurement)
 
-    def read_currentActual(self, attr):
-        self.debug_stream("In read_currentActual()")
-        attr.set_value(self.actual_current)
-
-    def is_currentActual_allowed(self, attr):
-        return self.get_current_and_field()
+    def is_MeasurementValue_allowed(self, attr):
+        return self.get_main_physical_quantity_and_field()
 
         #
 
@@ -526,7 +595,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
             attr.set_value(self.fieldA)
 
     def is_fieldA_allowed(self, attr):
-        return self.get_current_and_field() and not self.field_out_of_range
+        return self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
@@ -538,7 +607,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
             attr.set_value(self.fieldB)
 
     def is_fieldB_allowed(self, attr):
-        return self.get_current_and_field() and not self.field_out_of_range
+        return self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
@@ -550,7 +619,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
             attr.set_value(self.fieldANormalised)
 
     def is_fieldANormalised_allowed(self, attr):
-        return self.get_current_and_field() and not self.field_out_of_range
+        return self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
@@ -562,7 +631,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
             attr.set_value(self.fieldBNormalised)
 
     def is_fieldBNormalised_allowed(self, attr):
-        return self.get_current_and_field() and not self.field_out_of_range
+        return self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
@@ -582,12 +651,14 @@ class MagnetCircuit(PyTango.Device_4Impl):
         if self.hasCalibData:
             self.set_field_limits()
 
-        # If energy changes, current or field must also change
+        # If energy changes, voltage/current or field must also change
         # Can only do something if calibrated
         if self.hasCalibData:
             if self.scaleField:
-                self.debug_stream("Energy (Brho) changed to %f (%f): will recalculate current to preserve field" % (
-                    self.energy_r, self.BRho))
+                self.debug_stream(
+                    "Energy (Brho) changed to {0}({1}): will recalculate {2} to preserve field".format(self.energy_r,
+                                                                                                       self.BRho,
+                                                                                                       self.ps_attribute))
                 # since brho changed, need to recalc the field
                 sign = -1
                 if self.allowed_component == 0 and self.Type not in ["vkick", "Y_CORRECTOR"]:
@@ -596,28 +667,30 @@ class MagnetCircuit(PyTango.Device_4Impl):
                     self.fieldB[self.allowed_component] = self.MainFieldComponent_r * self.BRho * sign
                 else:
                     self.fieldA[self.allowed_component] = self.MainFieldComponent_r * self.BRho * sign
-                self.set_current \
-                    = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,
+
+                # TODO calculate votage
+                self.set_point \
+                    = calculate_current(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, self.BRho,
                                         self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.fieldA,
                                         self.fieldB, self.is_sole)
                 ###########################################################
-                # Set the current on the ps
+                # Set the new set point value on the ps
                 self.set_ps_current()
             else:
-                self.debug_stream("Energy changed: will recalculate fields for the PS current")
-
+                self.debug_stream("Energy changed: will recalculate fields for the PS {0}".format(self.ps_attribute))
+                # TODO calculate field
                 (success, self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised,
                  self.fieldB, self.fieldBNormalised) \
-                    = calculate_fields(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,
-                                       self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.actual_current,
-                                       self.set_current, is_sole=self.is_sole)
+                    = calculate_fields(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, self.BRho,
+                                       self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.actual_measurement,
+                                       self.set_point, is_sole=self.is_sole)
 
     def is_energy_allowed(self, attr):
-        # if writing then we need to know currents etc
+        # if writing then we need to know MeasurementValue etc
         if attr == PyTango.AttReqType.READ_REQ:
             return True
         else:
-            return self.get_current_and_field() and not self.field_out_of_range
+            return self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
@@ -653,18 +726,18 @@ class MagnetCircuit(PyTango.Device_4Impl):
                 self.fieldB[self.allowed_component] = self.MainFieldComponent_w * self.BRho * sign
             else:
                 self.fieldA[self.allowed_component] = self.MainFieldComponent_w * self.BRho * sign
-
-            self.set_current \
-                = calculate_current(self.allowed_component, self.currentsmatrix, self.fieldsmatrix, self.BRho,
+            # TODO voltage
+            self.set_point \
+                = calculate_current(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, self.BRho,
                                     self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.fieldA, self.fieldB,
                                     self.is_sole)
 
             ###########################################################
-            # Set the current on the ps
+            # Set the value on the ps
             self.set_ps_current()
 
     def is_MainFieldComponent_allowed(self, attr):
-        return self.get_current_and_field() and not self.field_out_of_range
+        return self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
@@ -676,7 +749,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
             attr.set_quality(self.IntFieldQ)
 
     def is_IntMainFieldComponent_allowed(self, attr):
-        return self.get_current_and_field() and not self.field_out_of_range
+        return self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
     def read_CyclingStatus(self, attr):
@@ -690,13 +763,6 @@ class MagnetCircuit(PyTango.Device_4Impl):
         # need to check cycling state
         self.check_cycling_state()
         attr.set_value(self.iscycling)
-
-    """def write_CyclingCurrentStep(self, attr):
-        self.debug_stream("In write_CyclingCurrentStep()")
-        self._cycler.current_step = attr.get_write_value()
-
-    def is_CyclingCurrentStep_allowed(self, attr):
-        return self._cycler and not self.iscycling"""
 
     def write_CyclingRampTime(self, attr):
         self.debug_stream("In write_CyclingRampTime()")
@@ -743,21 +809,20 @@ class MagnetCircuit(PyTango.Device_4Impl):
         else:
             return bool(self._cycler)
 
-    def read_NominalCurrentPercentage(self, attr):
-        self.debug_stream("In read_NominalCurrentPercentage()")
-        attr.set_value(self._cycler.current_nom_percentage)
+    def read_NominalSetPoint(self, attr):
+        self.debug_stream("In read_NominalSetPoint()")
+        attr.set_value(self._cycler.nominal_setpoint_percentage)
 
-    def write_NominalCurrentPercentage(self, attr):
-        self.debug_stream("In write_NominalCurrentPercentage()")
-        self._cycler.current_nom_percentage = attr.get_write_value()
+    def write_NominalSetPoint(self, attr):
+        self.debug_stream("In write_NominalSetPoint()")
+        self._cycler.nominal_setpoint_percentage = attr.get_write_value()
 
-    def is_NominalCurrentPercentage_allowed(self, attr):
+    def is_NominalSetPoint_allowed(self, attr):
         self.check_cycling_state()
         if attr == PyTango.AttReqType.WRITE_REQ:
             return self._cycler and not self.iscycling
         else:
             return bool(self._cycler)
-
 
     def read_CyclingSteps(self, attr):
         self.debug_stream("In read_CyclingSteps()")
@@ -774,18 +839,15 @@ class MagnetCircuit(PyTango.Device_4Impl):
         else:
             return bool(self._cycler)
 
+    def read_MaxSetPointValue(self, attr):
+        if not self.max_setpoint_value:
+            self.set_point_limits()
+        attr.set_value(self.max_setpoint_value)
 
-    def read_MaxCurrent(self, attr):
-        if not self.maxcurrent :
-            self.set_current_limits()
-        attr.set_value(self.maxcurrent)
-
-
-    def read_MinCurrent(self, attr):
-        if not self.mincurrent :
-            self.set_current_limits()
-        attr.set_value(self.mincurrent)
-
+    def read_MinSetPointValue(self, attr):
+        if not self.min_setpoint_value:
+            self.set_point_limits()
+        attr.set_value(self.min_setpoint_value)
 
     # -----------------------------------------------------------------------------
     #    MagnetCircuit command methods
@@ -803,8 +865,8 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
     def is_StartCycle_allowed(self):
         self.check_cycling_state()
-        ps_state_on  = self.get_ps_state() in [PyTango.DevState.ON ,
-                                               PyTango.DevState.MOVING]
+        ps_state_on = self.get_ps_state() in [PyTango.DevState.ON,
+                                              PyTango.DevState.MOVING]
         allowed = self._cycler is not None and not self.iscycling
         allowed = allowed and ps_state_on
         return allowed
@@ -830,6 +892,10 @@ class MagnetCircuitClass(PyTango.DeviceClass):
         'ExcitationCurveCurrents':
             [PyTango.DevVarStringArray,
              "Measured calibration currents for each multipole",
+             [[]]],
+        'ExcitationCurveVoltages':
+            [PyTango.DevVarStringArray,
+             "Measured calibration voltages for each multipole",
              [[]]],
         'ExcitationCurveFields':
             [PyTango.DevVarStringArray,
@@ -859,50 +925,50 @@ class MagnetCircuitClass(PyTango.DeviceClass):
 
     # Attribute definitions
     attr_list = {
-        'currentSet':
+        'SetPoint':
             [[PyTango.DevFloat,
               PyTango.SCALAR,
               PyTango.READ],
              {
-                 'label': "set current",
+                 'label': "Set point",
                  'unit': "A",
-                 'doc': "Set current on PS (attribute write value)",
+                 'doc': "Set point on PS (attribute write value)",
                  'Display level': PyTango.DispLevel.EXPERT,
                  'format': "%6.5f"
 
              }],
-        'currentActual':
+        'MeasurementValue':
             [[PyTango.DevFloat,
               PyTango.SCALAR,
               PyTango.READ],
              {
-                 'label': "actual current",
+                 'label': "Actual Mesurement Value",
                  'unit': "A",
-                 'doc': "Read current on PS",
+                 'doc': "Read value on PS",
                  'Display level': PyTango.DispLevel.EXPERT,
                  'format': "%6.5f"
              }],
 
-         'MaxCurrent':
+        'MaxSetPointValue':
             [[PyTango.DevFloat,
               PyTango.SCALAR,
               PyTango.READ],
              {
-                 'label': "maximal current",
+                 'label': "Maximal set point",
                  'unit': "A",
-                 'doc': "Maximal current on PS",
+                 'doc': "Maximal set point on PS",
                  'Display level': PyTango.DispLevel.EXPERT,
                  'format': "%6.5f"
              }],
 
-         'MinCurrent':
+        'MinSetPointValue':
             [[PyTango.DevFloat,
               PyTango.SCALAR,
               PyTango.READ],
              {
-                 'label': "minimal current",
+                 'label': "Minimal set point",
                  'unit': "A",
-                 'doc': "Minimal current on PS",
+                 'doc': "Minimal set point on PS",
                  'Display level': PyTango.DispLevel.EXPERT,
                  'format': "%6.5f"
              }],
@@ -964,7 +1030,8 @@ class MagnetCircuitClass(PyTango.DeviceClass):
              {
                  'label': "Preserve norm. field",
                  'unit': "T/F",
-                 'doc': "If true, if the energy changes the current is recalculated in order to preserve the normalised field"
+                 'doc': "If true, if the energy changes the current/voltage is recalculated in order to preserve the "
+                        "normalised field"
              }],
         'BRho':
             [[PyTango.DevFloat,
@@ -1000,19 +1067,17 @@ class MagnetCircuitClass(PyTango.DeviceClass):
                  'label': "Cycling Ramp Time",
                  'unit': "s",
                  'format': "%6.1f",
-                 'doc': "Time to increase or decrease current to min/max value"
+                 'doc': "Time to increase or decrease set point to min/max value"
              }],
 
-       'CyclingSteps':
+        'CyclingSteps':
             [[PyTango.DevLong,
               PyTango.SCALAR,
               PyTango.READ_WRITE],
              {
                  'label': "Cycling steps",
-                 'doc': "Number of current steps to increase current from low value to maximum"
+                 'doc': "Number of steps to increase set point from low value to maximum"
              }],
-
-
 
         'CyclingIterations':
             [[PyTango.DevLong,
@@ -1031,23 +1096,20 @@ class MagnetCircuitClass(PyTango.DeviceClass):
                  'label': "Cycling Wait Plateau",
                  'unit': "s",
                  'format': "%6.1f",
-                 'doc': "Waiting time at maximum and minimum current"
+                 'doc': "Waiting time at maximum and minimum set points"
              }],
 
-
-        'NominalCurrentPercentage':
+        'NominalSetPoint':
             [[PyTango.DevDouble,
               PyTango.SCALAR,
               PyTango.READ_WRITE],
              {
-                 'label': "Nominal Current Percentage",
+                 'label': "Nominal Set Point Percentage",
                  'format': "%6.6f",
                  'max value': "1.0",
                  'min value': "0.0",
-                 'doc': "Nominal current is a percentage of the max current "
+                 'doc': "Nominal set point after cycling (it is a percentage of the max set point "
              }],
-
-
 
         'MainFieldComponent':
             [[PyTango.DevDouble,
