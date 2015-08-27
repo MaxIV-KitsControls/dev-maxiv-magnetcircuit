@@ -16,7 +16,7 @@ class MagnetCyclingStateMachineTestCase(unittest.TestCase):
         self.statemachine.iterationstatus = ''
         self.statemachine.finished = False
         self.statemachine.__nonzero__ = lambda self: False
-        args = Mock('powersupply'), 10, -10, 5, 4, DEFAULT_CURRENT_STEP, DEFAULT_RAMP_TIME, DEFAULT_STEPS
+        args = Mock('powersupply'), 10, -10, 5, 4,  DEFAULT_RAMP_TIME, DEFAULT_STEPS
         self.magnetcycling = magnetcycling.MagnetCycling(*args)
         self.magnetcycling.cycling = True
         assert self.magnetcycling.cycling
@@ -43,7 +43,7 @@ class MagnetCyclingStateMachineTestCase(unittest.TestCase):
         self.assertEqual(present, expected,
                          "present phase: %s, expected phase: %s" % (present, expected))
 
-    def test_current_step(self):
+    """def test_current_step(self):
         " r/w in attribute current_step. "
         present = self.magnetcycling.current_step
         self.assertEqual(present, DEFAULT_CURRENT_STEP,
@@ -52,7 +52,7 @@ class MagnetCyclingStateMachineTestCase(unittest.TestCase):
         self.magnetcycling.current_step = 4
         present = self.magnetcycling.current_step
         self.assertEqual(present, value,
-                         "present current_step: %s, expected current_step: %s" % (present, value))
+                         "present current_step: %s, expected current_step: %s" % (present, value))"""
 
     def test_ramp_time(self):
         " r/w in attribute wait_step. "

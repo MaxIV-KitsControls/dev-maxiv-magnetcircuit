@@ -3,15 +3,15 @@ import math
 class DummyPS:
 
     def __init__(self, p0=0):
-        self.current = 0.0
+        self.value = 0.0
         self.moving = False
 
-    def getCurrent(self):
-        return self.current
+    def getValue(self):
+        return self.value
 
-    def setCurrent(self,data):
+    def setValue(self,data):
         self.moving = True
-        self.current = data
+        self.value = data
 
     def isMoving(self):
         return self.moving
