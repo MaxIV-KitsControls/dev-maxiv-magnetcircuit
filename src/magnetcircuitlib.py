@@ -17,7 +17,7 @@ from math import sqrt, factorial
 
 _maxdim = 10 #Maximum number of multipole components
 
-def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  poltimesorient, tilt, typ, length, actual_current, set_current=None, is_sole=False, find_limit=False):
+def calculate_fields(allowed_component, setpoints_matrix, fieldsmatrix, brho,  poltimesorient, tilt, typ, length, ps_read_value, ps_set_value=None, is_sole=False, find_limit=False):
 
     #print " +++++++++++ in CF +++++++++++++++ ", actual_current, set_current, is_sole
     #Calculate all field components which will include the one we already set, using actual current in PS
@@ -35,22 +35,22 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
 
         #Only need to set field elements up to multipole for which we have data.
         #Calib data above are all Nan
-        if np.isnan(currentsmatrix[i]).any():
+        if np.isnan(setpoints_matrix[i]).any():
             break
 
         #If data is all zeroes, can also skip
         #if np.count_nonzero(currentsmatrix[i]) == 0: #not in old version of numpy!
-        if np.all(currentsmatrix[i]==0):
+        if np.all(setpoints_matrix[i]==0):
             continue
         
         #If we are not just finding the limit of the interpolation data, 
         #if current is beyond interpolation data return an error
         if not find_limit: 
-            if actual_current < currentsmatrix[i][0] or actual_current > currentsmatrix[i][-1]:
+            if ps_read_value < setpoints_matrix[i][0] or ps_read_value > setpoints_matrix[i][-1]:
                 #print "read current out of bounds", actual_current,  currentsmatrix[i][0], currentsmatrix[i][-1]
                 return False, None, None, None, None, None, None
-            if set_current is not None:
-                if set_current < currentsmatrix[i][0] or set_current > currentsmatrix[i][-1]:
+            if ps_set_value is not None:
+                if ps_set_value < setpoints_matrix[i][0] or ps_set_value > setpoints_matrix[i][-1]:
                     print "set current out of bounds"
                     return False, None, None, None, None, None, None
 
@@ -62,9 +62,9 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
         #NB Theta (Theta * BRho) is NOT the zeroth element of fieldB (fieldB normalised) but store it there anyway
 
         #Do the interpolation and divide by length (fix for unwanted theta length factor later)
-        calcfield = poltimesorient * np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length
-        if set_current is not None:
-            setfield = poltimesorient * np.interp(set_current, currentsmatrix[i], fieldsmatrix[i]) / length 
+        calcfield = poltimesorient * np.interp(ps_read_value, setpoints_matrix[i], fieldsmatrix[i]) / length
+        if ps_set_value is not None:
+            setfield = poltimesorient * np.interp(ps_set_value, setpoints_matrix[i], fieldsmatrix[i]) / length
         else:
             setfield = np.NAN
 
@@ -121,7 +121,7 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
     #print "return ", typ, sign
     return True, sign*thiscomponent, sign*thissetcomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
 
-def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, poltimesorient, tilt, typ, length, fieldA, fieldB, is_sole=False):
+def calculate_setpoint(allowed_component, setpoints_matrix, fieldsmatrix, brho, poltimesorient, tilt, typ, length, fieldA, fieldB, is_sole=False):
     
     #For quad: calibration data are -1.0 * k1 * length * BRho
     #For sext: calibration data are -1.0 * k2 * length * BRho
@@ -156,10 +156,10 @@ def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, pol
 
     if fieldsmatrix[allowed_component][0] > 0.0:
         fields_o   = fieldsmatrix[allowed_component][::-1]
-        currents_o = currentsmatrix[allowed_component][::-1]
+        currents_o = setpoints_matrix[allowed_component][::-1]
     else:
         fields_o   = fieldsmatrix[allowed_component]
-        currents_o = currentsmatrix[allowed_component]
+        currents_o = setpoints_matrix[allowed_component]
 
     calc_current = np.interp(intBtimesBRho, fields_o, currents_o)
     #print "will interp ", intBtimesBRho, fields_o, currents_o, calc_current

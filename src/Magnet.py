@@ -31,17 +31,17 @@ import sys
 from math import sqrt
 from MagnetCircuit import MagnetCircuitClass, MagnetCircuit
 from TrimCircuit import TrimCircuitClass, TrimCircuit
-from magnetcircuitlib import calculate_fields #do not need calculate_current
+from magnetcircuitlib import calculate_fields  # do not need calculate_current
 from processcalibrationlib import process_calibration_data
 
-class Magnet (PyTango.Device_4Impl):
 
-    #--------- Add you global variables here --------------------------
-    _maxdim = 10 #Maximum number of multipole components
+class Magnet(PyTango.Device_4Impl):
+    # --------- Add you global variables here --------------------------
+    _maxdim = 10  # Maximum number of multipole components
 
-    def __init__(self,cl, name):
+    def __init__(self, cl, name):
         self._state = None
-        PyTango.Device_4Impl.__init__(self,cl,name)
+        PyTango.Device_4Impl.__init__(self, cl, name)
         self.debug_stream("In __init__()")
         Magnet.init_device(self)
 
@@ -49,38 +49,38 @@ class Magnet (PyTango.Device_4Impl):
         self.debug_stream("In delete_device()")
 
     def init_device(self):
-        self.debug_stream("In init_device()")        
+        self.debug_stream("In init_device()")
         self.set_state(PyTango.DevState.ON)
 
-        #attributes are read only field vectors
-        self.fieldA_main           = []
+        # attributes are read only field vectors
+        self.fieldA_main = []
         self.fieldANormalised_main = []
-        self.fieldB_main           = [] 
-        self.fieldBNormalised_main = [] 
+        self.fieldB_main = []
+        self.fieldBNormalised_main = []
         #
-        self.fieldA_trim           = [] 
-        self.fieldANormalised_trim = [] 
-        self.fieldB_trim           = [] 
-        self.fieldBNormalised_trim = [] 
+        self.fieldA_trim = []
+        self.fieldANormalised_trim = []
+        self.fieldB_trim = []
+        self.fieldBNormalised_trim = []
 
-        #this will get length, polarity, orientation and the raw calibration data
+        # this will get length, polarity, orientation and the raw calibration data
         self.get_device_properties(self.get_device_class())
         self.PolTimesOrient = self.Orientation * self.Polarity
-        self.is_sole = False #hack for solenoids until configured properly
+        self.is_sole = False  # hack for solenoids until configured properly
         self.field_out_of_range = False
 
         # boolean if magnet is controlled by voltage
         self.is_voltage_controlled = False
         self.physical_quantity_controlled = "current"
 
-        #get trim and main coil proxies
+        # get trim and main coil proxies
         self._main_circuit_device = None
         self._trim_circuit_device = None
         self.MainCoil = None
         self.TrimCoil = None
         self.get_coil_proxies()
 
-        #Some status strings
+        # Some status strings
         self.status_str_ilk = ""
         self.status_str_cfg = ""
         self.status_str_cir = ""
@@ -88,37 +88,37 @@ class Magnet (PyTango.Device_4Impl):
         self.status_str_trmi = ""
         self.status_str_b = ""
 
-        #interlock config
-        self.interlock_descs   = {}
+        # interlock config
+        self.interlock_descs = {}
         self.interlock_proxies = {}
         self.bad_Ilock_config = False
         self.get_interlock_config()
 
-        #configure magnet type, needed to calculate fields
+        # configure magnet type, needed to calculate fields
         self.allowed_component = 0
         self.configure_type()
 
         if self.is_voltage_controlled:
             self.excitation_curve_setpoints = self.ExcitationCurveVoltages
             self.physical_quantity_controlled = "voltage"
-        else :
+        else:
             self.excitation_curve_setpoints = self.ExcitationCurveCurrents
 
-        # TODO : check if calibration data is the same formula for voltage and current
-        #process the calibration data into useful numpy arrays 
-        (self.hasCalibData, self.status_str_cfg,  self.fieldsmatrix,  self.physicalmatrix) \
-            = process_calibration_data(self.excitation_curve_setpoints,self.ExcitationCurveFields, self.allowed_component)
+        # process the calibration data into useful numpy arrays
+        (self.hasCalibData, self.status_str_cfg, self.fieldsmatrix, self.ps_setpoint_matrix) \
+            = process_calibration_data(self.excitation_curve_setpoints, self.ExcitationCurveFields,
+                                       self.allowed_component)
 
-        #option to disable use of trim coils
+        # option to disable use of trim coils
         self.applyTrim = False
 
     ###############################################################################
     #
     def get_coil_proxies(self):
 
-        #CircuitProxies property can contain main and trim coil
+        # CircuitProxies property can contain main and trim coil
         if len(self.CircuitProxies) == 1 and "CRT" not in self.CircuitProxies[0]:
-            self.MainCoil=self.CircuitProxies[0]
+            self.MainCoil = self.CircuitProxies[0]
         elif len(self.CircuitProxies) == 2:
             if "CRT" in self.CircuitProxies[0]:
                 self.TrimCoil = self.CircuitProxies[0]
@@ -128,11 +128,10 @@ class Magnet (PyTango.Device_4Impl):
                 self.MainCoil = self.CircuitProxies[0]
         else:
             self.debug_stream("Invalid coil proxy config")
-            self.MainCoil=None
-            self.TrimCoil=None
+            self.MainCoil = None
+            self.TrimCoil = None
         self.debug_stream("Magnet main coil: %s " % self.MainCoil)
         self.debug_stream("Magnet trim coil: %s " % self.TrimCoil)
-
 
     ###############################################################################
     #
@@ -161,22 +160,22 @@ class Magnet (PyTango.Device_4Impl):
     ###############################################################################
     #
     def get_interlock_config(self):
-        #This is a list of strings of the form [(device,attribute,description),(dev,att,desc)...]
-        #First see if we gave any interlock information in the property
-        if self.TemperatureInterlock !=  [ "" ]:
+        # This is a list of strings of the form [(device,attribute,description),(dev,att,desc)...]
+        # First see if we gave any interlock information in the property
+        if self.TemperatureInterlock != [""]:
             for s in self.TemperatureInterlock:
                 try:
                     s_l = s.split(",")
-                    ilock_att   = s_l[0]+"/"+s_l[1]
-                    ilock_desc  = s_l[2]
+                    ilock_att = s_l[0] + "/" + s_l[1]
+                    ilock_desc = s_l[2]
                     ilock_proxy = PyTango.AttributeProxy(ilock_att)
-                    self.interlock_descs[ilock_att]=ilock_desc
-                    self.interlock_proxies[ilock_att]=ilock_proxy
+                    self.interlock_descs[ilock_att] = ilock_desc
+                    self.interlock_proxies[ilock_att] = ilock_proxy
                 except (IndexError, PyTango.DevFailed) as e:
                     self.debug_stream("Exception configuring interlocks %s " % self.TemperatureInterlock)
-                    #if we fail to configure one interlock, don't configure any
+                    # if we fail to configure one interlock, don't configure any
                     self.bad_Ilock_config = True
-             
+
         else:
             self.debug_stream("No interlock tags specified in properties")
 
@@ -189,7 +188,7 @@ class Magnet (PyTango.Device_4Impl):
             self.allowed_component = 2
         elif self.Type == "koct":
             self.allowed_component = 3
-        elif self.Type in ["hkick","vkick","csrcsbend","sben","rben", "sbend"]:
+        elif self.Type in ["hkick", "vkick", "csrcsbend", "sben", "rben", "sbend"]:
             self.allowed_component = 0
         elif self.Type == "sole":
             self.allowed_component = 0
@@ -200,33 +199,33 @@ class Magnet (PyTango.Device_4Impl):
         else:
             self.status_str_cfg = 'Magnet type invalid %s' % self.Type
             self.debug_stream(self.status_str_cfg)
-            self.set_state( PyTango.DevState.FAULT )
+            self.set_state(PyTango.DevState.FAULT)
 
     ###############################################################################
     #
     def check_interlock(self):
 
         self.isInterlocked = False
-        #If we have some interlock attributes, see how they are set
-        if self.TemperatureInterlock !=  [ "" ]:
+        # If we have some interlock attributes, see how they are set
+        if self.TemperatureInterlock != [""]:
             self.status_str_ilk = ""
             if self.bad_Ilock_config:
-                self.status_str_ilock =  "Interlock tag specified but interlock proxies could not be configured"
+                self.status_str_ilock = "Interlock tag specified but interlock proxies could not be configured"
                 return
             try:
                 for key in self.interlock_proxies:
-                    TempInterlockValue  = self.interlock_proxies[key].read().value
+                    TempInterlockValue = self.interlock_proxies[key].read().value
                     if TempInterlockValue == True:
-                        self.status_str_ilk = self.status_str_ilk + "\nTemperature Interlock Set! " + key + " (" + self.interlock_descs[key] + ")"
-                        self.set_state(PyTango.DevState.ALARM)  
+                        self.status_str_ilk = self.status_str_ilk + "\nTemperature Interlock Set! " + key + " (" + \
+                                              self.interlock_descs[key] + ")"
+                        self.set_state(PyTango.DevState.ALARM)
                         self.isInterlocked = True
 
             except (IndexError, PyTango.DevFailed) as e:
                 self.debug_stream("Exception reading interlock AttributeProxy")
                 self.status_str_ilk = "Cannot read specified interlock tag (s) "
         else:
-            self.status_str_ilk =  "No temperature interlock tags specified in properties"
-
+            self.status_str_ilk = "No temperature interlock tags specified in properties"
 
     ###############################################################################
     #
@@ -259,16 +258,22 @@ class Magnet (PyTango.Device_4Impl):
                 self.status_str_b = ""
 
             except (AttributeError, PyTango.DevFailed) as e:
-                self.debug_stream("Cannot get state or {0} from circuit device {1}".format(self.physical_quantity_controlled,  self.MainCoil))
+                self.debug_stream(
+                    "Cannot get state or {0} from circuit device {1}".format(self.physical_quantity_controlled,
+                                                                             self.MainCoil))
                 return False
             else:
-                # TODO differentiate voltage calculate to current (ex calculate_fields(...., is_voltage_controlled = self.is_voltage_controlled )
-                (success, MainFieldComponent_r, MainFieldComponent_w, self.fieldA_main, self.fieldANormalised_main, self.fieldB_main, self.fieldBNormalised_main) \
-                    = calculate_fields(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, BRho, self.PolTimesOrient, self.Tilt, self.Type, self.Length, physical_quantity, None, self.is_sole)
+
+                (success, MainFieldComponent_r, MainFieldComponent_w, self.fieldA_main, self.fieldANormalised_main,
+                 self.fieldB_main, self.fieldBNormalised_main) \
+                    = calculate_fields(self.allowed_component, self.ps_setpoint_matrix, self.fieldsmatrix, BRho,
+                                       self.PolTimesOrient, self.Tilt, self.Type, self.Length, physical_quantity, None,
+                                       self.is_sole)
 
                 self.field_out_of_range = False
-                if success==False:
-                    self.status_str_b = "Cannot interpolate read {0} {1}".format(self.physical_quantity_controlled, physical_quantity)
+                if success == False:
+                    self.status_str_b = "Cannot interpolate read {0} {1}".format(self.physical_quantity_controlled,
+                                                                                 physical_quantity)
                     self.field_out_of_range = True
                 return True
         else:
@@ -299,143 +304,151 @@ class Magnet (PyTango.Device_4Impl):
 
         self.debug_stream("In always_excuted_hook()")
 
-        #There should be a main coil
-        if self.MainCoil==None:
+        # There should be a main coil
+        if self.MainCoil == None:
             self.set_state(PyTango.DevState.FAULT)
             self.status_str_cir = "No main coil defined in properties"
         else:
-            #set state according to main circuit state
+            # set state according to main circuit state
             self.set_state(self.get_main_circuit_state())
             #
-            #maybe also a trim coil
+            # maybe also a trim coil
             if self.applyTrim:
-                if self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN]:
-                    if self.TrimCoil!=None:
+                if self.get_state() not in [PyTango.DevState.FAULT, PyTango.DevState.UNKNOWN]:
+                    if self.TrimCoil != None:
                         self.set_state(self.get_trim_circuit_state())
             else:
                 self.status_str_trm = "Trim field not applied"
 
-        #get interlock state
+        # get interlock state
         self.check_interlock()
 
-        #set status message
-        msg = self.status_str_cfg +"\n"+ self.status_str_cir +"\n"+ self.status_str_b +"\n" + self.status_str_trm +"\n" + self.status_str_ilk + "\n"+ self.status_str_trmi
+        # set status message
+        msg = self.status_str_cfg + "\n" + self.status_str_cir + "\n" + self.status_str_b + "\n" + \
+              self.status_str_trm + "\n" + self.status_str_ilk + "\n" + self.status_str_trmi
         self.set_status(os.linesep.join([s for s in msg.splitlines() if s]))
 
-
-    #-----------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
     #    Magnet read/write attribute methods
-    #-----------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------
 
-    #Special function to set zeroth element of field vector to zero, as it should be for dipoles
-    #(We use the zeroth element to store theta, but should not be returned)
-    def convert_dipole_vector(self,vector):
+    # Special function to set zeroth element of field vector to zero, as it should be for dipoles
+    # (We use the zeroth element to store theta, but should not be returned)
+    def convert_dipole_vector(self, vector):
         returnvector = list(vector)
-        returnvector[0]=np.NAN
+        returnvector[0] = np.NAN
         return returnvector
 
     #
 
     def read_fieldA(self, attr):
         self.debug_stream("In read_fieldA()")
-        #look up field from trim
-        if self.applyTrim and self.TrimCoil!=None:
+        # look up field from trim
+        if self.applyTrim and self.TrimCoil != None:
             if self.trim_circuit_device:
                 try:
-                    self.fieldA_trim  = self.trim_circuit_device.fieldA
+                    self.fieldA_trim = self.trim_circuit_device.fieldA
                     self.status_str_trmi = ""
                 except PyTango.DevFailed as e:
                     msg = "Cannot add field from trim circuit device " + self.TrimCoil
                     self.debug_stream(msg)
                     self.status_str_trmi = msg
-                    self.fieldA_trim = [] 
+                    self.fieldA_trim = []
             else:
                 self.debug_stream("Cannot get proxy to trim coil " + self.TrimCoil)
                 self.fieldA_trim = []
-        #do the sum
-        attr.set_value(self.fieldA_trim+self.fieldA_main)
-     
+        # do the sum
+        attr.set_value(self.fieldA_trim + self.fieldA_main)
+
     def is_fieldA_allowed(self, attr):
         self.debug_stream("In is_fieldA_allowed()")
-        print "self.hasCalibData" , self.hasCalibData
-        print "self.get_main_physical_quantity_and_field()" , self.get_main_physical_quantity_and_field()
+        print "self.hasCalibData", self.hasCalibData
+        print "self.get_main_physical_quantity_and_field()", self.get_main_physical_quantity_and_field()
         print "not self.field_out_of_range", not self.field_out_of_range
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_physical_quantity_and_field() and not self.field_out_of_range
+        return self.get_state() not in [PyTango.DevState.FAULT,
+                                        PyTango.DevState.UNKNOWN] and self.hasCalibData and \
+               self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
     def read_fieldANormalised(self, attr):
         self.debug_stream("In read_fieldANormalised()")
-        #look up field from trim
-        if self.applyTrim and self.TrimCoil!=None:
+        # look up field from trim
+        if self.applyTrim and self.TrimCoil != None:
             if self.trim_circuit_device:
                 try:
-                    self.fieldANormalised_trim  = self.trim_circuit_device.fieldANormalised
+                    self.fieldANormalised_trim = self.trim_circuit_device.fieldANormalised
                     self.status_str_trmi = ""
                 except PyTango.DevFailed as e:
                     msg = "Cannot add field from trim circuit device " + self.TrimCoil
                     self.debug_stream(msg)
                     self.status_str_trmi = msg
-                    self.fieldANormalised_trim = [] 
+                    self.fieldANormalised_trim = []
             else:
                 self.debug_stream("Cannot get proxy to trim coil " + self.TrimCoil)
                 self.fieldANormalised_trim = []
-        #do the sum
-        attr.set_value(self.fieldANormalised_trim+self.fieldANormalised_main)
-     
+        # do the sum
+        attr.set_value(self.fieldANormalised_trim + self.fieldANormalised_main)
+
     def is_fieldANormalised_allowed(self, attr):
         self.debug_stream("In is_fieldANormalised_allowed()")
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_physical_quantity_and_field() and not self.field_out_of_range
+        return self.get_state() not in [PyTango.DevState.FAULT,
+                                        PyTango.DevState.UNKNOWN] and self.hasCalibData and \
+               self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
     def read_fieldB(self, attr):
         self.debug_stream("In read_fieldB()")
-        #look up field from trim
-        if self.applyTrim and self.TrimCoil!=None:
+        # look up field from trim
+        if self.applyTrim and self.TrimCoil != None:
             if self.trim_circuit_device:
                 try:
-                    self.fieldB_trim  = self.trim_circuit_device.fieldB
+                    self.fieldB_trim = self.trim_circuit_device.fieldB
                     self.status_str_trmi = ""
                 except PyTango.DevFailed as e:
                     msg = "Cannot add field from trim circuit device " + self.TrimCoil
                     self.debug_stream(msg)
                     self.status_str_trmi = msg
-                    self.fieldB_trim = [] 
+                    self.fieldB_trim = []
             else:
                 self.debug_stream("Cannot get proxy to trim coil " + self.TrimCoil)
                 self.fieldB_trim = []
-        #do the sum
-        attr.set_value(self.fieldB_trim+self.fieldB_main)
-     
+        # do the sum
+        attr.set_value(self.fieldB_trim + self.fieldB_main)
+
     def is_fieldB_allowed(self, attr):
         self.debug_stream("In is_fieldB_allowed()")
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_physical_quantity_and_field() and not self.field_out_of_range
+        return self.get_state() not in [PyTango.DevState.FAULT,
+                                        PyTango.DevState.UNKNOWN] and self.hasCalibData and \
+               self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
     def read_fieldBNormalised(self, attr):
         self.debug_stream("In read_fieldBNormalised()")
-        #look up field from trim
-        if self.applyTrim and self.TrimCoil!=None:
+        # look up field from trim
+        if self.applyTrim and self.TrimCoil != None:
             if self.trim_circuit_device:
                 try:
-                    self.fieldBNormalised_trim  = self.trim_circuit_device.fieldBNormalised
+                    self.fieldBNormalised_trim = self.trim_circuit_device.fieldBNormalised
                     self.status_str_trmi = ""
                 except PyTango.DevFailed as e:
                     msg = "Cannot add field from trim circuit device " + self.TrimCoil
                     self.debug_stream(msg)
                     self.status_str_trmi = msg
-                    self.fieldBNormalised_trim = [] 
+                    self.fieldBNormalised_trim = []
             else:
                 self.debug_stream("Cannot get proxy to trim coil " + self.TrimCoil)
                 self.fieldBNormalised_trim = []
-        #do the sum
-        attr.set_value(self.fieldBNormalised_trim+self.fieldBNormalised_main)
-     
+        # do the sum
+        attr.set_value(self.fieldBNormalised_trim + self.fieldBNormalised_main)
+
     def is_fieldBNormalised_allowed(self, attr):
         self.debug_stream("In is_fieldBNormalised_allowed()")
-        return self.get_state() not in [PyTango.DevState.FAULT,PyTango.DevState.UNKNOWN] and self.hasCalibData and self.get_main_physical_quantity_and_field() and not self.field_out_of_range
+        return self.get_state() not in [PyTango.DevState.FAULT,
+                                        PyTango.DevState.UNKNOWN] and self.hasCalibData and \
+               self.get_main_physical_quantity_and_field() and not self.field_out_of_range
 
     #
 
@@ -454,149 +467,148 @@ class Magnet (PyTango.Device_4Impl):
         self.debug_stream("In write_applyTrim()")
         self.applyTrim = attr.get_write_value()
 
-    #-----------------------------------------------------------------------------
-    #    Magnet command methods
-    #-----------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------
+        #    Magnet command methods
+        # -----------------------------------------------------------------------------
 
 
 class MagnetClass(PyTango.DeviceClass):
-
-
-    #Class Properties
+    # Class Properties
     class_property_list = {
-        }
-
-
-    #Device Properties
-    device_property_list = {
-        'CircuitProxies':
-        [PyTango.DevVarStringArray,
-         "Associated circuits",
-         [ [] ] ],
-        'Length':
-        [PyTango.DevFloat,
-         "Length",
-         [ 0.0 ] ],
-        'Polarity':
-        [PyTango.DevShort,
-         "Polarity",
-         [ 1 ] ],
-        'Orientation':
-        [PyTango.DevShort,
-         "Orientation",
-         [ 1 ] ],
-        'Tilt':
-        [PyTango.DevShort,
-         "Tilt",
-         [ 0 ] ],
-        'Type':
-        [PyTango.DevString,
-         "Type",
-         [ "" ] ],
-        'TemperatureInterlock':
-        [PyTango.DevVarStringArray,
-         "TemperatureInterlock",
-         [ "" ] ],
-        #PJB I use strings below since I can't have a 2d array of floats?
-        #So now I end up with a list of lists instead. See above for conversion.
-        'ExcitationCurveCurrents':
-        [PyTango.DevVarStringArray,
-         "Measured calibration currents for each multipole",
-         [ ] ],
-        'ExcitationCurveVoltages':
-        [PyTango.DevVarStringArray,
-         "Measured calibration voltages for each multipole",
-         [ ] ],
-        'ExcitationCurveFields':
-        [PyTango.DevVarStringArray,
-         "Measured calibration fields for each multipole",
-         [ ] ],
     }
 
 
-    #Command definitions
+    # Device Properties
+    device_property_list = {
+        'CircuitProxies':
+            [PyTango.DevVarStringArray,
+             "Associated circuits",
+             [[]]],
+        'Length':
+            [PyTango.DevFloat,
+             "Length",
+             [0.0]],
+        'Polarity':
+            [PyTango.DevShort,
+             "Polarity",
+             [1]],
+        'Orientation':
+            [PyTango.DevShort,
+             "Orientation",
+             [1]],
+        'Tilt':
+            [PyTango.DevShort,
+             "Tilt",
+             [0]],
+        'Type':
+            [PyTango.DevString,
+             "Type",
+             [""]],
+        'TemperatureInterlock':
+            [PyTango.DevVarStringArray,
+             "TemperatureInterlock",
+             [""]],
+        # PJB I use strings below since I can't have a 2d array of floats?
+        # So now I end up with a list of lists instead. See above for conversion.
+        'ExcitationCurveCurrents':
+            [PyTango.DevVarStringArray,
+             "Measured calibration currents for each multipole",
+             []],
+        'ExcitationCurveVoltages':
+            [PyTango.DevVarStringArray,
+             "Measured calibration voltages for each multipole",
+             []],
+        'ExcitationCurveFields':
+            [PyTango.DevVarStringArray,
+             "Measured calibration fields for each multipole",
+             []],
+    }
+
+
+    # Command definitions
     cmd_list = {
-        }
+    }
 
 
-    #Attribute definitions
+    # Attribute definitions
     attr_list = {
         'applyTrim':
-        [[PyTango.DevBoolean,
-          PyTango.SCALAR,
-          PyTango.READ_WRITE],
-         {
-             'label': "apply trim field",
-             'unit': "T/F",        
-             'doc': "Toggles whether the magnet device adds the trim field to the field of the main circuit",
-         } ],
+            [[PyTango.DevBoolean,
+              PyTango.SCALAR,
+              PyTango.READ_WRITE],
+             {
+                 'label': "apply trim field",
+                 'unit': "T/F",
+                 'doc': "Toggles whether the magnet device adds the trim field to the field of the main circuit",
+             }],
         'fieldA':
-        [[PyTango.DevFloat,
-          PyTango.SPECTRUM,
-          PyTango.READ, 10],
-         {
-             'label': "A_n",
-             'unit': "T m^1-n",
-             'doc': "field A (skew) components",
-             'format': "%6.5e"
-         } ],
+            [[PyTango.DevFloat,
+              PyTango.SPECTRUM,
+              PyTango.READ, 10],
+             {
+                 'label': "A_n",
+                 'unit': "T m^1-n",
+                 'doc': "field A (skew) components",
+                 'format': "%6.5e"
+             }],
         'fieldB':
-        [[PyTango.DevFloat,
-          PyTango.SPECTRUM,
-          PyTango.READ, 10],
-         {
-             'label': "B_n",
-             'unit': "T m^1-n",
-             'doc': "field B (skew) components",             
-             'format': "%6.5e"
-         } ],
+            [[PyTango.DevFloat,
+              PyTango.SPECTRUM,
+              PyTango.READ, 10],
+             {
+                 'label': "B_n",
+                 'unit': "T m^1-n",
+                 'doc': "field B (skew) components",
+                 'format': "%6.5e"
+             }],
         'fieldANormalised':
-        [[PyTango.DevFloat,
-          PyTango.SPECTRUM,
-          PyTango.READ, 10],
-         {
-             'label': "e/p A_n",
-             'unit': "m^-n",
-             'doc': "field A normalised (skew) components",
-             'format': "%6.5e"
-         } ],
+            [[PyTango.DevFloat,
+              PyTango.SPECTRUM,
+              PyTango.READ, 10],
+             {
+                 'label': "e/p A_n",
+                 'unit': "m^-n",
+                 'doc': "field A normalised (skew) components",
+                 'format': "%6.5e"
+             }],
         'fieldBNormalised':
-        [[PyTango.DevFloat,
-          PyTango.SPECTRUM,
-          PyTango.READ, 10],
-         {
-             'label': "e/p B_n",
-             'unit': "m^-n",
-             'doc': "field B normalised (skew) components",
-             'format': "%6.5e"
-         } ],
+            [[PyTango.DevFloat,
+              PyTango.SPECTRUM,
+              PyTango.READ, 10],
+             {
+                 'label': "e/p B_n",
+                 'unit': "m^-n",
+                 'doc': "field B normalised (skew) components",
+                 'format': "%6.5e"
+             }],
         'temperatureInterlock':
-        [[PyTango.DevBoolean,
-          PyTango.SCALAR,
-          PyTango.READ],
-         {
-             'label': "temperature interlock",
-             'unit': "T/F",
-             'doc': "indicates if a thermoswitch read by PLC is over temperature"
-         } ]
+            [[PyTango.DevBoolean,
+              PyTango.SCALAR,
+              PyTango.READ],
+             {
+                 'label': "temperature interlock",
+                 'unit': "T/F",
+                 'doc': "indicates if a thermoswitch read by PLC is over temperature"
+             }]
     }
 
 
 def main():
     try:
         py = PyTango.Util(sys.argv)
-        py.add_class(MagnetClass,Magnet,'Magnet')
-        py.add_class(MagnetCircuitClass, MagnetCircuit,'MagnetCircuit')
-        py.add_class(TrimCircuitClass, TrimCircuit,'TrimCircuit')
+        py.add_class(MagnetClass, Magnet, 'Magnet')
+        py.add_class(MagnetCircuitClass, MagnetCircuit, 'MagnetCircuit')
+        py.add_class(TrimCircuitClass, TrimCircuit, 'TrimCircuit')
 
         U = PyTango.Util.instance()
         U.server_init()
         U.server_run()
 
-    except PyTango.DevFailed,e:
-        print '-------> Received a DevFailed exception:',e
-    except Exception,e:
-        print '-------> An unforeseen exception occured....',e
+    except PyTango.DevFailed, e:
+        print '-------> Received a DevFailed exception:', e
+    except Exception, e:
+        print '-------> An unforeseen exception occured....', e
+
 
 if __name__ == '__main__':
     main()

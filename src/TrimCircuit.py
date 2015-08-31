@@ -30,7 +30,7 @@ import sys
 import numpy as np
 from math import sqrt
 import time
-from magnetcircuitlib import calculate_fields, calculate_current
+from magnetcircuitlib import calculate_fields, calculate_setpoint
 from processcalibrationlib import process_calibration_data
 
 ##############################################################################################################
@@ -604,7 +604,7 @@ class TrimCircuit (PyTango.Device_4Impl):
                 self.fieldA[self.allowed_component]  = self.MainFieldComponent_r * self.BRho * sign
 
             self.set_current \
-                = calculate_current(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.fieldA, self.fieldB, False)
+                = calculate_setpoint(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.fieldA, self.fieldB, False)
             ###########################################################
             #Set the current on the ps
             self.set_ps_current()
@@ -653,7 +653,7 @@ class TrimCircuit (PyTango.Device_4Impl):
             self.fieldA[self.allowed_component]  = self.MainFieldComponent_w * self.BRho * sign
 
         self.set_current \
-            = calculate_current(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.fieldA, self.fieldB, False)
+            = calculate_setpoint(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.fieldA, self.fieldB, False)
         ###########################################################
         #Set the current on the ps
         self.set_ps_current()

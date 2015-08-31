@@ -29,7 +29,7 @@ import os
 import sys
 import numpy as np
 from math import sqrt
-from magnetcircuitlib import calculate_fields, calculate_current
+from magnetcircuitlib import calculate_fields, calculate_setpoint
 from cycling_statemachine.magnetcycling import MagnetCycling
 from processcalibrationlib import process_calibration_data
 
@@ -152,7 +152,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
         # process the calibration data into useful numpy arrays
         if magnet_properties_ok and config_type_ok:
-            (self.hasCalibData, self.status_str_cal, self.fieldsmatrix, self.physicalmatrix) \
+            (self.hasCalibData, self.status_str_cal, self.fieldsmatrix, self.ps_setpoint_matrix) \
                 = process_calibration_data(self.excitation_curve_setpoints, self.ExcitationCurveFields,
                                            self.allowed_component)
 
@@ -376,13 +376,12 @@ class MagnetCircuit(PyTango.Device_4Impl):
             att = self.get_device_attr().get_attr_by_name("MainFieldComponent")
             multi_prop = PyTango.MultiAttrProp()
             att.get_properties(multi_prop)
-            # TODO calculate field
             minMainFieldComponent = \
-                calculate_fields(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, self.BRho,
+                calculate_fields(self.allowed_component, self.ps_setpoint_matrix, self.fieldsmatrix, self.BRho,
                                  self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.min_setpoint_value,
                                  is_sole=self.is_sole, find_limit=True)[1]
             maxMainFieldComponent = \
-                calculate_fields(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, self.BRho,
+                calculate_fields(self.allowed_component, self.ps_setpoint_matrix, self.fieldsmatrix, self.BRho,
                                  self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.max_setpoint_value,
                                  is_sole=self.is_sole, find_limit=True)[1]
 
@@ -419,7 +418,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
                                          iterations=self._default_iteration,
                                          ramp_time=self._default_ramp_time,
                                          steps=self._default_steps,
-                                         unit = self.ps_unit)
+                                         unit=self.ps_unit)
         else:
             self.status_str_cyc = "Setup cycling: cannot get proxy to %s " % self.PowerSupplyProxy
 
@@ -464,10 +463,10 @@ class MagnetCircuit(PyTango.Device_4Impl):
                 # if have calib data calculate the actual and set fields
                 self.field_out_of_range = False
                 if self.hasCalibData:
-                    # TODO calculate field current/voltage
                     (success, self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised,
                      self.fieldB, self.fieldBNormalised) \
-                        = calculate_fields(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, self.BRho,
+                        = calculate_fields(self.allowed_component, self.ps_setpoint_matrix, self.fieldsmatrix,
+                                           self.BRho,
                                            self.PolTimesOrient, self.Tilt, self.Type, self.Length,
                                            self.actual_measurement,
                                            self.set_point, is_sole=self.is_sole)
@@ -556,17 +555,18 @@ class MagnetCircuit(PyTango.Device_4Impl):
     def set_ps_setpoint(self):
         # Set the setpoint on the ps
         if self.set_point > self.max_setpoint_value:
-            self.debug_stream("Requested {0} {1} above limit of PS ({2})".format(self.ps_attribute, self.set_point, self.max_setpoint_value))
+            self.debug_stream("Requested {0} {1} above limit of PS ({2})".format(self.ps_attribute, self.set_point,
+                                                                                 self.max_setpoint_value))
             self.set_point = self.max_setpoint_value
         if self.set_point < self.min_setpoint_value:
-            self.debug_stream("Requested {0} {1} below limit of PS ({2})".format(self.ps_attribute, self.set_point, self.max_setpoint_value))
+            self.debug_stream("Requested {0} {1} below limit of PS ({2})".format(self.ps_attribute, self.set_point,
+                                                                                 self.max_setpoint_value))
             self.set_point = self.min_setpoint_value
         self.debug_stream("SETTING {0} ON THE PS TO: {1} ".format(self.ps_attribute.upper(), self.set_point))
         try:
             self.ps_device.write_attribute(self.ps_attribute, self.set_point)
         except PyTango.DevFailed as e:
-            self.status_str_ps = "Cannot set {0} on PS {1}".format(self.ps_attribute , self.PowerSupplyProxy)
-
+            self.status_str_ps = "Cannot set {0} on PS {1}".format(self.ps_attribute, self.PowerSupplyProxy)
 
     # -----------------------------------------------------------------------------
     #    MagnetCircuit read/write attribute methods
@@ -669,20 +669,18 @@ class MagnetCircuit(PyTango.Device_4Impl):
                 else:
                     self.fieldA[self.allowed_component] = self.MainFieldComponent_r * self.BRho * sign
 
-                # TODO calculate votage
                 self.set_point \
-                    = calculate_current(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, self.BRho,
-                                        self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.fieldA,
-                                        self.fieldB, self.is_sole)
+                    = calculate_setpoint(self.allowed_component, self.ps_setpoint_matrix, self.fieldsmatrix, self.BRho,
+                                         self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.fieldA,
+                                         self.fieldB, self.is_sole)
                 ###########################################################
                 # Set the new set point value on the ps
                 self.set_ps_setpoint()
             else:
                 self.debug_stream("Energy changed: will recalculate fields for the PS {0}".format(self.ps_attribute))
-                # TODO calculate field
                 (success, self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised,
                  self.fieldB, self.fieldBNormalised) \
-                    = calculate_fields(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, self.BRho,
+                    = calculate_fields(self.allowed_component, self.ps_setpoint_matrix, self.fieldsmatrix, self.BRho,
                                        self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.actual_measurement,
                                        self.set_point, is_sole=self.is_sole)
 
@@ -727,11 +725,10 @@ class MagnetCircuit(PyTango.Device_4Impl):
                 self.fieldB[self.allowed_component] = self.MainFieldComponent_w * self.BRho * sign
             else:
                 self.fieldA[self.allowed_component] = self.MainFieldComponent_w * self.BRho * sign
-            # TODO voltage
             self.set_point \
-                = calculate_current(self.allowed_component, self.physicalmatrix, self.fieldsmatrix, self.BRho,
-                                    self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.fieldA, self.fieldB,
-                                    self.is_sole)
+                = calculate_setpoint(self.allowed_component, self.ps_setpoint_matrix, self.fieldsmatrix, self.BRho,
+                                     self.PolTimesOrient, self.Tilt, self.Type, self.Length, self.fieldA, self.fieldB,
+                                     self.is_sole)
 
             ###########################################################
             # Set the value on the ps
