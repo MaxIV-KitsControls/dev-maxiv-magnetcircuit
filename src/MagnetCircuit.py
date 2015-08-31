@@ -307,16 +307,17 @@ class MagnetCircuit(PyTango.Device_4Impl):
         att_vc.set_properties(multi_prop_vc)
         att_ivc.set_properties(multi_prop_ivc)
 
-        print self.is_voltage_controlled, self.Type
         unit = "A"
+        attribute = "Current"
         if self.is_voltage_controlled:
             unit = "V"
+            attribute = "Voltage"
 
-        att_sp = self.get_device_attr().get_attr_by_name("SetPoint")
+        att_sp = self.get_device_attr().get_attr_by_name("PowerSupplySetPoint")
         multi_prop_sp = PyTango.MultiAttrProp()
         att_sp.get_properties(multi_prop_sp)
 
-        att_mv = self.get_device_attr().get_attr_by_name("MeasurementValue")
+        att_mv = self.get_device_attr().get_attr_by_name("PowerSupplyReadValue")
         multi_prop_mv = PyTango.MultiAttrProp()
         att_mv.get_properties(multi_prop_mv)
 
@@ -328,7 +329,9 @@ class MagnetCircuit(PyTango.Device_4Impl):
         multi_prop_min_sp = PyTango.MultiAttrProp()
         att_min_sp.get_properties(multi_prop_min_sp)
 
+        multi_prop_sp.label = attribute + " Set Point"
         multi_prop_sp.unit = unit
+        multi_prop_mv.label = "Actual " + attribute
         multi_prop_mv.unit = unit
         multi_prop_max_sp.unit = unit
         multi_prop_min_sp.unit = unit
@@ -572,18 +575,18 @@ class MagnetCircuit(PyTango.Device_4Impl):
     #    MagnetCircuit read/write attribute methods
     # -----------------------------------------------------------------------------
 
-    def read_SetPoint(self, attr):
-        self.debug_stream("In read_SetPoint()")
+    def read_PowerSupplySetPoint(self, attr):
+        self.debug_stream("In read_PowerSupplySetPoint()")
         attr.set_value(self.set_point)
 
-    def is_SetPoint_allowed(self, attr):
+    def is_PowerSupplySetPoint_allowed(self, attr):
         return self.get_main_physical_quantity_and_field()
 
-    def read_MeasurementValue(self, attr):
-        self.debug_stream("In read_MeasurementValue()")
+    def read_PowerSupplyReadValue(self, attr):
+        self.debug_stream("In read_PowerSupplyReadValue()")
         attr.set_value(self.actual_measurement)
 
-    def is_MeasurementValue_allowed(self, attr):
+    def is_PowerSupplyReadValue_allowed(self, attr):
         return self.get_main_physical_quantity_and_field()
 
         #
@@ -926,24 +929,24 @@ class MagnetCircuitClass(PyTango.DeviceClass):
 
     # Attribute definitions
     attr_list = {
-        'SetPoint':
+        'PowerSupplySetPoint':
             [[PyTango.DevFloat,
               PyTango.SCALAR,
               PyTango.READ],
              {
-                 'label': "Set point",
+                 'label': "Current Set point",
                  'unit': "A",
                  'doc': "Set point on PS (attribute write value)",
                  'Display level': PyTango.DispLevel.EXPERT,
                  'format': "%6.5f"
 
              }],
-        'MeasurementValue':
+        'PowerSupplyReadValue':
             [[PyTango.DevFloat,
               PyTango.SCALAR,
               PyTango.READ],
              {
-                 'label': "Actual Mesurement Value",
+                 'label': "Actual Current",
                  'unit': "A",
                  'doc': "Read value on PS",
                  'Display level': PyTango.DispLevel.EXPERT,
