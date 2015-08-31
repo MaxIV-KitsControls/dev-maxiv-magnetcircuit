@@ -99,15 +99,15 @@ class Magnet (PyTango.Device_4Impl):
         self.configure_type()
 
         if self.is_voltage_controlled:
-            self.excitation_curve = self.ExcitationCurveVoltages
+            self.excitation_curve_setpoints = self.ExcitationCurveVoltages
             self.physical_quantity_controlled = "voltage"
         else :
-            self.excitation_curve = self.ExcitationCurveCurrents
+            self.excitation_curve_setpoints = self.ExcitationCurveCurrents
 
         # TODO : check if calibration data is the same formula for voltage and current
         #process the calibration data into useful numpy arrays 
         (self.hasCalibData, self.status_str_cfg,  self.fieldsmatrix,  self.physicalmatrix) \
-            = process_calibration_data(self.excitation_curve,self.ExcitationCurveFields, self.allowed_component)
+            = process_calibration_data(self.excitation_curve_setpoints,self.ExcitationCurveFields, self.allowed_component)
 
         #option to disable use of trim coils
         self.applyTrim = False

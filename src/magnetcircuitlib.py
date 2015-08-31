@@ -29,7 +29,8 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
     fieldBNormalised = [np.NAN]*_maxdim
     thiscomponent = 0.0
 
-    #We set all the field components, not just the allowed one:
+    #NB: i=0 for dipoles and correctors, 1 for quad, 2 for sext
+    #We set all the field components for which we have calibration data, not just the allowed ("steering") one:
     for i in range (0,_maxdim):
 
         #Only need to set field elements up to multipole for which we have data.
@@ -40,21 +41,10 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
         #If data is all zeroes, can also skip
         #if np.count_nonzero(currentsmatrix[i]) == 0: #not in old version of numpy!
         if np.all(currentsmatrix[i]==0):
-            #print "found zeroes"
             continue
         
-        #NB: i=0 for dipoles and correctors, 1 for quad, 2 for sext
-        #There is an extra sign -1 for quads and sext (i.e. when i is not 0)
-        #Vertical correctors (i=0) also get sign -1
-        #sign = -1
-        #if  allowed_component == 0 and typ not in ["vkick","Y_CORRECTOR"]:
-        #    sign =  1
-
-        #For a quad: Given a current we get back k1 * length * BRho
-        #k1 * BRho is the element of fieldB, k1 is the element of fieldB_norm
-
-        #If we are finding limit of field, report the limit of the interpolation data
-        #If not, and current is beyond interpolation data, return an error
+        #If we are not just finding the limit of the interpolation data, 
+        #if current is beyond interpolation data return an error
         if not find_limit: 
             if actual_current < currentsmatrix[i][0] or actual_current > currentsmatrix[i][-1]:
                 #print "read current out of bounds", actual_current,  currentsmatrix[i][0], currentsmatrix[i][-1]
@@ -64,29 +54,33 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
                     print "set current out of bounds"
                     return False, None, None, None, None, None, None
 
-        calcfield = poltimesorient * np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length
+        #For a quad: Given a current we get back k1 * length * BRho
+        #For a sext: Given a current we get back k2 * length * BRho
+        #For a kicker: get back theta * BRho
+        #For a solenoid, get back B_s directly, no scaling by BRho
+        #For a dip:  Given a current we get back Theta * BRho
+        #NB Theta (Theta * BRho) is NOT the zeroth element of fieldB (fieldB normalised) but store it there anyway
 
+        #Do the interpolation and divide by length (fix for unwanted theta length factor later)
+        calcfield = poltimesorient * np.interp(actual_current, currentsmatrix[i], fieldsmatrix[i]) / length
         if set_current is not None:
             setfield = poltimesorient * np.interp(set_current, currentsmatrix[i], fieldsmatrix[i]) / length 
         else:
             setfield = np.NAN
 
+        #k1 * BRho is the element of fieldB, k1 is the element of fieldB_norm, etc
+        #
         calcfield_norm = calcfield / brho
         setfield_norm  = setfield / brho
 
         #There is a factor 1/n! (so factor 1/2 for sextupole for which n=2)
-        #For a sext: Given a current we get back k2 * length/2 * BRho
-        #k2 * BRho is the element of fieldB, k2 is the element of fieldB_norm
         ##factorial_factor = factorial(i)
         ##calcfield      = calcfield*factorial_factor
         ##calcfield_norm = calcfield_norm*factorial_factor
         ##setfield_norm  = setfield_norm*factorial_factor
 
-        #For a dip: Given a current we get back Theta * BRho
-        #NB Theta (Theta * BRho) is NOT the zeroth element of fieldB (fieldB normalised) but store it there anyway
-        #See wiki page for details
-        #For a solenoid, get back B_s directly, no scaling by BRho
-
+        #Fill A or B vector as appropriate
+        #
         if tilt == 0 and typ not in ["vkick","SKEW_QUADRUPOLE","Y_CORRECTOR"]:
             fieldB[i] = calcfield
             fieldBNormalised[i] = calcfield_norm
@@ -120,6 +114,7 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
                     thiscomponent = calcfield_norm * length
                     thissetcomponent = setfield_norm * length
 
+    #sign convention for ring
     sign = -1
     if  allowed_component == 0 and typ not in ["vkick","Y_CORRECTOR"]:
         sign =  1
@@ -128,21 +123,19 @@ def calculate_fields(allowed_component, currentsmatrix, fieldsmatrix, brho,  pol
 
 def calculate_current(allowed_component, currentsmatrix, fieldsmatrix, brho, poltimesorient, tilt, typ, length, fieldA, fieldB, is_sole=False):
     
-    #For quad: given k1 * length * BRho (call it intBtimesBRho) we get a current
-    #For sext: given k2 * length/2.0 * BRho (call it intBtimesBRho) we get a current
-    #For dip:  given theta *  BRho (call it intBtimesBRho) we get a current
-    #For sole: given bs we get a current
+    #For quad: calibration data are -1.0 * k1 * length * BRho
+    #For sext: calibration data are -1.0 * k2 * length * BRho
+    #For dip:  calibration data are theta *  BRho
+    #For sole: calibration data are Bs directly
+    #For the above, steering variable are k1, k2, theta and Bs respectively
 
-    #There is an extra sign -1 for quads and sext (i.e. when i is not 0)
-    #Vertical correctors (i=0) also get sign -1
-    #sign = -1
-    #if allowed_component == 0 and typ not in ["vkick","Y_CORRECTOR"]:
-    #    sign =  1
-
+    #Take data from A or B vector as appropriate, apply extra sign factor
+    #Vector elements already have the BRho factor in them
+    #
     if tilt == 0 and typ not in ["vkick","SKEW_QUADRUPOLE","Y_CORRECTOR"]:
-        intBtimesBRho = fieldB[allowed_component]*length * poltimesorient #* sign
+        intBtimesBRho = fieldB[allowed_component]*length * poltimesorient 
     else:
-        intBtimesBRho = fieldA[allowed_component]*length * poltimesorient #* sign
+        intBtimesBRho = fieldA[allowed_component]*length * poltimesorient 
 
     #hack since for theta should not multiply by length
     if allowed_component == 0:

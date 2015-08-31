@@ -144,16 +144,16 @@ class MagnetCircuit(PyTango.Device_4Impl):
         if self.is_voltage_controlled:
             self.ps_attribute = "voltage"
             self.ps_unit = 'V'
-            self.excitation_curve = self.ExcitationCurveVoltages
+            self.excitation_curve_setpoints = self.ExcitationCurveVoltages
         else:
             self.ps_attribute = "Current"
             self.ps_unit = 'A'
-            self.excitation_curve = self.ExcitationCurveCurrents
+            self.excitation_curve_setpoints = self.ExcitationCurveCurrents
 
         # process the calibration data into useful numpy arrays
         if magnet_properties_ok and config_type_ok:
             (self.hasCalibData, self.status_str_cal, self.fieldsmatrix, self.physicalmatrix) \
-                = process_calibration_data(self.excitation_curve, self.ExcitationCurveFields,
+                = process_calibration_data(self.excitation_curve_setpoints, self.ExcitationCurveFields,
                                            self.allowed_component)
 
         # set limits on set point
@@ -423,8 +423,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
         else:
             self.status_str_cyc = "Setup cycling: cannot get proxy to %s " % self.PowerSupplyProxy
 
-            ##############################################################################################################
-
+    ##############################################################################################################
     #
     def get_ps_state(self):
 
@@ -448,8 +447,6 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
     ##############################################################################################################
     #
-
-
     def get_main_physical_quantity_and_field(self):
 
         self.debug_stream("In get_main_physical_quantity_and_field()")
@@ -589,7 +586,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
     def is_PowerSupplyReadValue_allowed(self, attr):
         return self.get_main_physical_quantity_and_field()
 
-        #
+    #
 
     def read_fieldA(self, attr):
         self.debug_stream("In read_fieldA()")
