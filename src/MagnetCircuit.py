@@ -553,19 +553,20 @@ class MagnetCircuit(PyTango.Device_4Impl):
         returnvector[0] = np.NAN
         return returnvector
 
-    def set_ps_current(self):
-        # Set the current on the ps
+    def set_ps_setpoint(self):
+        # Set the setpoint on the ps
         if self.set_point > self.max_setpoint_value:
-            self.debug_stream("Requested current %f above limit of PS (%f)" % (self.set_point, self.max_setpoint_value))
+            self.debug_stream("Requested {0} {1} above limit of PS ({2})".format(self.ps_attribute, self.set_point, self.max_setpoint_value))
             self.set_point = self.max_setpoint_value
         if self.set_point < self.min_setpoint_value:
-            self.debug_stream("Requested current %f below limit of PS (%f)" % (self.set_point, self.min_setpoint_value))
+            self.debug_stream("Requested {0} {1} below limit of PS ({2})".format(self.ps_attribute, self.set_point, self.max_setpoint_value))
             self.set_point = self.min_setpoint_value
-        self.debug_stream("SETTING CURRENT ON THE PS TO: %f ", self.set_point)
+        self.debug_stream("SETTING {0} ON THE PS TO: {1} ".format(self.ps_attribute.upper(), self.set_point))
         try:
             self.ps_device.write_attribute(self.ps_attribute, self.set_point)
         except PyTango.DevFailed as e:
-            self.status_str_ps = "Cannot set current on PS" + self.PowerSupplyProxy
+            self.status_str_ps = "Cannot set {0} on PS {1}".format(self.ps_attribute , self.PowerSupplyProxy)
+
 
     # -----------------------------------------------------------------------------
     #    MagnetCircuit read/write attribute methods
@@ -675,7 +676,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
                                         self.fieldB, self.is_sole)
                 ###########################################################
                 # Set the new set point value on the ps
-                self.set_ps_current()
+                self.set_ps_setpoint()
             else:
                 self.debug_stream("Energy changed: will recalculate fields for the PS {0}".format(self.ps_attribute))
                 # TODO calculate field
@@ -734,7 +735,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
             ###########################################################
             # Set the value on the ps
-            self.set_ps_current()
+            self.set_ps_setpoint()
 
     def is_MainFieldComponent_allowed(self, attr):
         return self.get_main_physical_quantity_and_field() and not self.field_out_of_range
