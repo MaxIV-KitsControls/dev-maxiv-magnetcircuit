@@ -39,9 +39,13 @@ from processcalibrationlib import process_calibration_data
 #
 class Wrapped_PS_Device(object):
     # pass ps device
-    def __init__(self, psdev, attr_name):
+    def __init__(self, psdev, attr_name, use_cache=True):
         self.attr = attr_name
-        self.psdev = psdev
+        if use_cache:
+            self.psdev = psdev
+        else:
+            self.psdev = PyTango.DeviceProxy(psdev.dev_name())
+            self.psdev.set_source(PyTango.DevSource.DEV)
 
     def setValue(self, value):
         self.psdev.write_attribute(self.attr, value)
@@ -410,7 +414,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
             return
 
         if self.ps_device:
-            self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device, self.ps_attribute)
+            self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device, self.ps_attribute, use_cache=False)
             self._cycler = MagnetCycling(powersupply=self.wrapped_ps_device,
                                          hi_setpoint=self.max_setpoint_value,
                                          lo_setpoint=self.min_setpoint_value,
@@ -471,8 +475,9 @@ class MagnetCircuit(PyTango.Device_4Impl):
                                            self.actual_measurement,
                                            self.set_point, is_sole=self.is_sole)
                     if success == False:
-                        self.status_str_b = "Cannot interpolate read/set {0} {1} {2} " % (
-                            self.ps_attribute, self.actual_measurement, self.set_point)
+                        self.status_str_b = "Cannot interpolate read/set {0} {1} {2} ".format(self.ps_attribute,
+                                                                                              self.actual_measurement,
+                                                                                              self.set_point)
                         self.field_out_of_range = True
                     return True
                 else:  # if not calib data, can read ps value but not field
