@@ -138,3 +138,10 @@
 	* Fix typo in handling of SKEW_QUADRUPOLE mode
 	* Many changes from AD for the cycling
 	* v1.6.3
+
+01-08-2015 PB for A Dupre
+	* Merge branch version that can deal with voltage controlled power supplies
+	* Remove references to currents and instead talk of set points
+	* Avoid to use cached value of state and current if PS is polled
+	* Tiny fix to exception handling
+	* V1.7.0

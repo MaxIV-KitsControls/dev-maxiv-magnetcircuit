@@ -304,7 +304,7 @@ class TrimCircuit (PyTango.Device_4Impl):
             try:
                 self.status_str_ps = "Reading state from %s  " % self.PowerSupplyProxy  
                 ps_state = self.ps_device.State()
-            except:
+            except (AttributeError, PyTango.DevFailed):
                 self.status_str_ps = "Cannot read state of PS " + self.PowerSupplyProxy
                 self.debug_stream(self.status_str_ps)
                 return PyTango.DevState.FAULT
