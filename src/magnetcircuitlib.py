@@ -19,14 +19,14 @@ _maxdim = 10 #Maximum number of multipole components
 
 def calculate_fields(allowed_component, setpoints_matrix, fieldsmatrix, brho,  poltimesorient, tilt, typ, length, ps_read_value, ps_set_value=None, is_sole=False, find_limit=False):
 
-    #print " +++++++++++ in CF +++++++++++++++ ", actual_current, set_current, is_sole
+    #print " +++++++++++ in CF +++++++++++++++ ", ps_read_value, brho
     #Calculate all field components which will include the one we already set, using actual current in PS
     #Allowed component is zero for solenoids and dipoles, but need to distinguish between them with ugly is_sole flag
 
-    fieldA = [np.NAN]*_maxdim
-    fieldB = [np.NAN]*_maxdim
-    fieldANormalised = [np.NAN]*_maxdim
-    fieldBNormalised = [np.NAN]*_maxdim
+    fieldA = np.asarray([np.NAN]*_maxdim)
+    fieldB = np.asarray([np.NAN]*_maxdim)
+    fieldANormalised = np.asarray([np.NAN]*_maxdim)
+    fieldBNormalised = np.asarray([np.NAN]*_maxdim)
     thiscomponent = 0.0
 
     #NB: i=0 for dipoles and correctors, 1 for quad, 2 for sext
@@ -51,7 +51,7 @@ def calculate_fields(allowed_component, setpoints_matrix, fieldsmatrix, brho,  p
                 return False, None, None, None, None, None, None
             if ps_set_value is not None:
                 if ps_set_value < setpoints_matrix[i][0] or ps_set_value > setpoints_matrix[i][-1]:
-                    print "set current out of bounds"
+                    #print "set current out of bounds"
                     return False, None, None, None, None, None, None
 
         #For a quad: Given a current we get back k1 * length * BRho
@@ -62,6 +62,7 @@ def calculate_fields(allowed_component, setpoints_matrix, fieldsmatrix, brho,  p
         #NB Theta (Theta * BRho) is NOT the zeroth element of fieldB (fieldB normalised) but store it there anyway
 
         #Do the interpolation and divide by length (fix for unwanted theta length factor later)
+        
         calcfield = poltimesorient * np.interp(ps_read_value, setpoints_matrix[i], fieldsmatrix[i]) / length
         if ps_set_value is not None:
             setfield = poltimesorient * np.interp(ps_set_value, setpoints_matrix[i], fieldsmatrix[i]) / length
@@ -84,8 +85,8 @@ def calculate_fields(allowed_component, setpoints_matrix, fieldsmatrix, brho,  p
         if tilt == 0 and typ not in ["vkick","SKEW_QUADRUPOLE","Y_CORRECTOR"]:
             fieldB[i] = calcfield
             fieldBNormalised[i] = calcfield_norm
-            fieldA[i] = 0.0
-            fieldANormalised[i] = 0.0
+            fieldA[i] = np.NAN
+            fieldANormalised[i] = np.NAN
             if i==allowed_component:
                 #print "Setting this component", fieldB[i] 
                 thiscomponent=calcfield_norm
@@ -100,8 +101,8 @@ def calculate_fields(allowed_component, setpoints_matrix, fieldsmatrix, brho,  p
         else:
             fieldA[i] = calcfield 
             fieldANormalised[i] = calcfield_norm 
-            fieldB[i] = 0.0
-            fieldBNormalised[i] = 0.0
+            fieldB[i] = np.NAN
+            fieldBNormalised[i] = np.NAN
             if i==allowed_component:
                 #print "Setting this component", fieldA[i]
                 thiscomponent=calcfield_norm
@@ -118,7 +119,7 @@ def calculate_fields(allowed_component, setpoints_matrix, fieldsmatrix, brho,  p
     sign = -1
     if  allowed_component == 0 and typ not in ["vkick","Y_CORRECTOR"]:
         sign =  1
-    #print "return ", typ, sign
+
     return True, sign*thiscomponent, sign*thissetcomponent, fieldA, fieldANormalised, fieldB, fieldBNormalised
 
 def calculate_setpoint(allowed_component, setpoints_matrix, fieldsmatrix, brho, poltimesorient, tilt, typ, length, fieldA, fieldB, is_sole=False):

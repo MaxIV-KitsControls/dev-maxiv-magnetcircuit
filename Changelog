@@ -145,3 +145,8 @@
 	* Avoid to use cached value of state and current if PS is polled
 	* Tiny fix to exception handling
 	* V1.7.0
+
+02-08-2015 Paul Bell
+	* Fix in magnet device to correctly sum trim and main fields
+	* Use numpy not lists for field vectors to handle nans
+	* v1.7.1

@@ -450,13 +450,6 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     ##############################################################################################################
 
-    #Special function to set zeroth element of field vector to zero, as it should be for dipoles
-    #(We use the zeroth element to store theta, but should not be returned)
-    def convert_dipole_vector(self,vector):
-        returnvector = list(vector)
-        returnvector[0]=np.NAN
-        return returnvector
-
     def set_ps_current(self):
         #Set the current on the ps
         if self.set_current > self.maxcurrent:
@@ -502,14 +495,7 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def read_fieldA(self, attr):
         self.debug_stream("In read_fieldA()")
-        #Dipoles and solenoids both have allowed component= 0
-        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
-        #For solenoids, we store Bs there
-        #BUT in reality zeroth element is zero. See wiki page for details.
-        if self.allowed_component == 0:
-            attr.set_value(self.convert_dipole_vector(self.fieldA))
-        else:
-            attr.set_value(self.fieldA)
+        attr.set_value(self.fieldA)
 
     def is_fieldA_allowed(self, attr):
         self.debug_stream("In read_fieldA_allowed()")
@@ -520,14 +506,7 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def read_fieldB(self, attr):
         self.debug_stream("In read_fieldB()")
-        #Dipoles and solenoids both have allowed component= 0
-        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
-        #For solenoids, we store Bs there
-        #BUT in reality zeroth element is zero. See wiki page for details.
-        if self.allowed_component == 0:
-            attr.set_value(self.convert_dipole_vector(self.fieldB))
-        else:
-            attr.set_value(self.fieldB)
+        attr.set_value(self.fieldB)
 
     def is_fieldB_allowed(self, attr):
         self.debug_stream("In read_fieldB_allowed()")
@@ -538,14 +517,7 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def read_fieldANormalised(self, attr):
         self.debug_stream("In read_fieldANormalised()")
-        #Dipoles and solenoids both have allowed component= 0
-        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
-        #For solenoids, we store Bs there
-        #BUT in reality zeroth element is zero. See wiki page for details.
-        if self.allowed_component == 0:
-            attr.set_value(self.convert_dipole_vector(self.fieldANormalised))
-        else:
-            attr.set_value(self.fieldANormalised)
+        attr.set_value(self.fieldANormalised)
 
     def is_fieldANormalised_allowed(self, attr):
         self.debug_stream("In read_fieldANormalised_allowed()")
@@ -556,14 +528,7 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def read_fieldBNormalised(self, attr):
         self.debug_stream("In read_fieldBNormalised()")
-        #Dipoles and solenoids both have allowed component= 0
-        #For dipoles, we store theta (theta * BRho) in zeroth element of fieldX (fieldX normalised)
-        #For solenoids, we store Bs there
-        #BUT in reality zeroth element is zero. See wiki page for details.
-        if self.allowed_component == 0:
-            attr.set_value(self.convert_dipole_vector(self.fieldBNormalised))
-        else:
-            attr.set_value(self.fieldBNormalised)
+        attr.set_value(self.fieldBNormalised)
 
     def is_fieldBNormalised_allowed(self, attr):
         self.debug_stream("In read_fieldBNormalised_allowed()")

@@ -53,15 +53,15 @@ class Magnet(PyTango.Device_4Impl):
         self.set_state(PyTango.DevState.ON)
 
         # attributes are read only field vectors
-        self.fieldA_main = []
-        self.fieldANormalised_main = []
-        self.fieldB_main = []
-        self.fieldBNormalised_main = []
+        self.fieldA_main = np.zeros(shape=(self._maxdim), dtype=float)
+        self.fieldANormalised_main = np.zeros(shape=(self._maxdim), dtype=float)
+        self.fieldB_main = np.zeros(shape=(self._maxdim), dtype=float)
+        self.fieldBNormalised_main = np.zeros(shape=(self._maxdim), dtype=float)
         #
-        self.fieldA_trim = []
-        self.fieldANormalised_trim = []
-        self.fieldB_trim = []
-        self.fieldBNormalised_trim = []
+        self.fieldA_trim = np.zeros(shape=(self._maxdim), dtype=float)
+        self.fieldANormalised_trim = np.zeros(shape=(self._maxdim), dtype=float)
+        self.fieldB_trim = np.zeros(shape=(self._maxdim), dtype=float)
+        self.fieldBNormalised_trim = np.zeros(shape=(self._maxdim), dtype=float)
 
         # this will get length, polarity, orientation and the raw calibration data
         self.get_device_properties(self.get_device_class())
@@ -110,7 +110,7 @@ class Magnet(PyTango.Device_4Impl):
                                        self.allowed_component)
 
         # option to disable use of trim coils
-        self.applyTrim = False
+        self.applyTrim = True
 
     ###############################################################################
     #
@@ -252,7 +252,7 @@ class Magnet(PyTango.Device_4Impl):
         if self.main_circuit_device:
             try:
                 self.debug_stream("Will read {0} from main circuit".format(self.physical_quantity_controlled))
-                physical_quantity = self.main_circuit_device.MeasurementValue
+                physical_quantity = self.main_circuit_device.PowerSupplyReadValue
                 self.debug_stream("Will read BRho from main circuit")
                 BRho = self.main_circuit_device.BRho
                 self.status_str_b = ""
@@ -332,12 +332,16 @@ class Magnet(PyTango.Device_4Impl):
     #    Magnet read/write attribute methods
     # -----------------------------------------------------------------------------
 
-    # Special function to set zeroth element of field vector to zero, as it should be for dipoles
-    # (We use the zeroth element to store theta, but should not be returned)
-    def convert_dipole_vector(self, vector):
-        returnvector = list(vector)
-        returnvector[0] = np.NAN
-        return returnvector
+    #method to sum the main and trim fields, when some elements will be NAN
+    def sum_field(self, main_field, trim_field):
+        flags = np.isnan(main_field) & np.isnan(trim_field)
+        fM = main_field.copy()
+        fT = trim_field.copy()
+        fM[np.isnan(fM)] = 0.0
+        fT[np.isnan(fT)] = 0.0
+        out = fM + fT
+        out[flags] = np.NaN
+        return out
 
     #
 
@@ -349,22 +353,22 @@ class Magnet(PyTango.Device_4Impl):
                 try:
                     self.fieldA_trim = self.trim_circuit_device.fieldA
                     self.status_str_trmi = ""
+                    # do the sum
+                    field = self.sum_field(self.fieldA_main, self.fieldA_trim)
+                    attr.set_value(field)
                 except PyTango.DevFailed as e:
                     msg = "Cannot add field from trim circuit device " + self.TrimCoil
                     self.debug_stream(msg)
                     self.status_str_trmi = msg
-                    self.fieldA_trim = []
+                    attr.set_value(self.fieldA_main)
             else:
                 self.debug_stream("Cannot get proxy to trim coil " + self.TrimCoil)
-                self.fieldA_trim = []
-        # do the sum
-        attr.set_value(self.fieldA_trim + self.fieldA_main)
+                attr.set_value(self.fieldA_main)
+        else:
+            attr.set_value(self.fieldA_main)
 
     def is_fieldA_allowed(self, attr):
         self.debug_stream("In is_fieldA_allowed()")
-        print "self.hasCalibData", self.hasCalibData
-        print "self.get_main_physical_quantity_and_field()", self.get_main_physical_quantity_and_field()
-        print "not self.field_out_of_range", not self.field_out_of_range
         return self.get_state() not in [PyTango.DevState.FAULT,
                                         PyTango.DevState.UNKNOWN] and self.hasCalibData and \
                self.get_main_physical_quantity_and_field() and not self.field_out_of_range
@@ -378,17 +382,20 @@ class Magnet(PyTango.Device_4Impl):
             if self.trim_circuit_device:
                 try:
                     self.fieldANormalised_trim = self.trim_circuit_device.fieldANormalised
-                    self.status_str_trmi = ""
+                    self.status_str_trmi = "" 
+                    # do the sum
+                    field = self.sum_field(self.fieldANormalised_main, self.fieldANormalised_trim)
+                    attr.set_value(field)
                 except PyTango.DevFailed as e:
                     msg = "Cannot add field from trim circuit device " + self.TrimCoil
                     self.debug_stream(msg)
                     self.status_str_trmi = msg
-                    self.fieldANormalised_trim = []
+                    attr.set_value(self.fieldANormalised_main)
             else:
                 self.debug_stream("Cannot get proxy to trim coil " + self.TrimCoil)
-                self.fieldANormalised_trim = []
-        # do the sum
-        attr.set_value(self.fieldANormalised_trim + self.fieldANormalised_main)
+                attr.set_value(self.fieldANormalised_main)
+        else:
+            attr.set_value(self.fieldANormalised_main)
 
     def is_fieldANormalised_allowed(self, attr):
         self.debug_stream("In is_fieldANormalised_allowed()")
@@ -406,16 +413,19 @@ class Magnet(PyTango.Device_4Impl):
                 try:
                     self.fieldB_trim = self.trim_circuit_device.fieldB
                     self.status_str_trmi = ""
+                    # do the sum
+                    field = self.sum_field(self.fieldB_main, self.fieldB_trim)
+                    attr.set_value(field)
                 except PyTango.DevFailed as e:
                     msg = "Cannot add field from trim circuit device " + self.TrimCoil
                     self.debug_stream(msg)
                     self.status_str_trmi = msg
-                    self.fieldB_trim = []
+                    attr.set_value(self.fieldB_main)
             else:
                 self.debug_stream("Cannot get proxy to trim coil " + self.TrimCoil)
-                self.fieldB_trim = []
-        # do the sum
-        attr.set_value(self.fieldB_trim + self.fieldB_main)
+                attr.set_value(self.fieldB_main)
+        else:
+            attr.set_value(self.fieldB_main)
 
     def is_fieldB_allowed(self, attr):
         self.debug_stream("In is_fieldB_allowed()")
@@ -433,16 +443,19 @@ class Magnet(PyTango.Device_4Impl):
                 try:
                     self.fieldBNormalised_trim = self.trim_circuit_device.fieldBNormalised
                     self.status_str_trmi = ""
+                    # do the sum
+                    field = self.sum_field(self.fieldBNormalised_main, self.fieldBNormalised_trim)
+                    attr.set_value(field)
                 except PyTango.DevFailed as e:
                     msg = "Cannot add field from trim circuit device " + self.TrimCoil
                     self.debug_stream(msg)
                     self.status_str_trmi = msg
-                    self.fieldBNormalised_trim = []
+                    attr.set_value(self.fieldBNormalised_main)
             else:
                 self.debug_stream("Cannot get proxy to trim coil " + self.TrimCoil)
-                self.fieldBNormalised_trim = []
-        # do the sum
-        attr.set_value(self.fieldBNormalised_trim + self.fieldBNormalised_main)
+                attr.set_value(self.fieldBNormalised_main)
+        else:
+            attr.set_value(self.fieldBNormalised_main)
 
     def is_fieldBNormalised_allowed(self, attr):
         self.debug_stream("In is_fieldBNormalised_allowed()")

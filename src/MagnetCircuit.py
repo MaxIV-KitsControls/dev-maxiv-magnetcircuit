@@ -553,9 +553,9 @@ class MagnetCircuit(PyTango.Device_4Impl):
     # For solenoids, we store Bs there. But n reality zeroth element is zero. See wiki page for details.
     # But for correctors small theta is the zeroth component.
     def convert_dipole_vector(self, vector):
-        returnvector = list(vector)
-        returnvector[0] = np.NAN
-        return returnvector
+        #vector = list(vector)
+        vector[0] = np.NAN
+        return vector
 
     def set_ps_setpoint(self):
         # Set the setpoint on the ps
