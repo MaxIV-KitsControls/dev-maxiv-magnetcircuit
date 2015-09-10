@@ -234,7 +234,7 @@ class Magnet(PyTango.Device_4Impl):
         self.debug_stream("In get_main_circuit_state()")
         if self.main_circuit_device:
             try:
-                cir_state = self.main_circuit_device.State()
+                cir_state = self.main_circuit_device.read_attribute("State").value
                 self.status_str_cir = "Connected to main circuit %s in state %s " % (self.MainCoil, cir_state)
             except (AttributeError, PyTango.DevFailed) as e:
                 self.status_str_cir = "Cannot get state of main circuit device " + self.MainCoil
@@ -287,7 +287,7 @@ class Magnet(PyTango.Device_4Impl):
         self.debug_stream("In get_trim_circuit_state()")
         if self.trim_circuit_device:
             try:
-                cir_state = self.trim_circuit_device.State()
+                cir_state = self.trim_circuit_device.read_attribute("State").value
                 self.status_str_trm = "Connected to trim circuit %s in state %s " % (self.TrimCoil, cir_state)
             except (AttributeError, PyTango.DevFailed) as e:
                 self.status_str_trm = "Cannot get state of trim circuit device " + self.TrimCoil
