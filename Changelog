@@ -154,3 +154,7 @@
 10-08-2015 Paul Bell
 	* Use read attribute state not State() command to get PS state
 	* v1.7.2
+
+13-10-2015 Paul Bell
+	* Fix typo in status string of TSW interlocks
+	* v1.7.3

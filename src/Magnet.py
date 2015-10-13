@@ -210,7 +210,7 @@ class Magnet(PyTango.Device_4Impl):
         if self.TemperatureInterlock != [""]:
             self.status_str_ilk = ""
             if self.bad_Ilock_config:
-                self.status_str_ilock = "Interlock tag specified but interlock proxies could not be configured"
+                self.status_str_ilk = "Interlock tag specified but interlock proxies could not be configured"
                 return
             try:
                 for key in self.interlock_proxies:
