@@ -158,3 +158,8 @@
 13-10-2015 Paul Bell
 	* Fix typo in status string of TSW interlocks
 	* v1.7.3
+
+22-10-2015 Paul Bell
+	* Only instantiate trim circuits in the ring
+	* Fix for case that magnets have no calibration, only circuits
+	* v1.7.4

@@ -608,12 +608,18 @@ class MagnetClass(PyTango.DeviceClass):
 
 def main():
     try:
+
         py = PyTango.Util(sys.argv)
+
         py.add_class(MagnetClass, Magnet, 'Magnet')
         py.add_class(MagnetCircuitClass, MagnetCircuit, 'MagnetCircuit')
-        py.add_class(TrimCircuitClass, TrimCircuit, 'TrimCircuit')
 
         U = PyTango.Util.instance()
+
+        #Trim circuit class needed for ring magnets only, not linac
+        if U.get_ds_name().split("/")[1].startswith("R"):
+            py.add_class(TrimCircuitClass, TrimCircuit, 'TrimCircuit')
+
         U.server_init()
         U.server_run()
 

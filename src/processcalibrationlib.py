@@ -23,6 +23,8 @@ def process_calibration_data(ExcitationCurveSetPoints, ExcitationCurveFields, al
     hasCalibData=False
 
     #Check there is data:
+    if len(ExcitationCurveSetPoints) == 0 or len(ExcitationCurveFields) == 0:
+        return hasCalibData, "Calibration data is missing.", None, None
     #May have given empty list:
     if ExcitationCurveSetPoints[0]=="[]" or ExcitationCurveFields[0]=="[]":
         return hasCalibData, "Calibration data is missing.", None, None
