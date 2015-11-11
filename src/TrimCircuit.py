@@ -98,11 +98,11 @@ class TrimCircuit (PyTango.Device_4Impl):
 
         #Proxy to power supply device
         self._ps_device = None
-        self.actual_current = None
-        self.set_current = None
+        self.actual_measurement = None
+        self.set_point = None
 
         #set limits on current
-        self.set_current_limits()
+        self.set_point_limits()
 
         #read the properties from the Tango DB, including calib data (length, powersupply proxy...)  
         self.PolTimesOrient = 1 #always one for circuit
@@ -249,20 +249,20 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     ##############################################################################################################
     #
-    def set_current_limits(self):
+    def set_point_limits(self):
 
-        self.mincurrent = self.maxcurrent = None
+        self.min_setpoint_value = self.max_setpoint_value = None
         try:
 
-            maxcurrent_s = self.ps_device.get_attribute_config("Current").max_value
-            mincurrent_s = self.ps_device.get_attribute_config("Current").min_value
+            max_setpoint_s = self.ps_device.get_attribute_config("Current").max_value
+            min_setpoint_s = self.ps_device.get_attribute_config("Current").min_value
 
-            if maxcurrent_s == 'Not specified' or mincurrent_s == 'Not specified':
+            if max_setpoint_s == 'Not specified' or min_setpoint_s == 'Not specified':
                 self.debug_stream("Current limits not specified") 
 
             else:
-                self.maxcurrent = float(maxcurrent_s)
-                self.mincurrent = float(mincurrent_s)
+                self.max_setpoint_value = float(max_setpoint_s)
+                self.min_setpoint_value = float(min_setpoint_s)
                 
         except (AttributeError, PyTango.DevFailed):
             self.debug_stream("Cannot read current limits from PS " + self.PowerSupplyProxy)
@@ -272,15 +272,15 @@ class TrimCircuit (PyTango.Device_4Impl):
     #
     def set_field_limits(self):
 
-        if self.maxcurrent != None and self.mincurrent != None:
+        if self.max_setpoint_value != None and self.min_setpoint_value != None:
 
             #Set the limits on the variable component (k1 etc) which will change if the energy changes
             att = self.get_device_attr().get_attr_by_name("MainFieldComponent")
             multi_prop = PyTango.MultiAttrProp()
             att.get_properties(multi_prop)
 
-            minMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length,  self.mincurrent, is_sole=False, find_limit=True)[1]
-            maxMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length,  self.maxcurrent, is_sole=False, find_limit=True)[1]
+            minMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length,  self.min_setpoint_value, is_sole=False, find_limit=True)[1]
+            maxMainFieldComponent = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length,  self.max_setpoint_value, is_sole=False, find_limit=True)[1]
 
             #print "calc min  limit for ", self.mincurrent, minMainFieldComponent
             #print "calc max  limit for ", self.maxcurrent, maxMainFieldComponent
@@ -323,9 +323,9 @@ class TrimCircuit (PyTango.Device_4Impl):
 
         if self.ps_device:
             try:
-                current_att = self.ps_device.read_attribute("Current")
-                self.actual_current = current_att.value
-                self.set_current = current_att.w_value
+                measurement_att = self.ps_device.read_attribute("Current")
+                self.actual_measurement = measurement_att.value
+                self.set_point = measurement_att.w_value
                 self.status_str_b = ""
                 #Just assume the set current is whatever is written on the ps device (could be written directly there!)
             except:
@@ -336,9 +336,9 @@ class TrimCircuit (PyTango.Device_4Impl):
                 if self.Mode in self.hasCalibData and self.hasCalibData[self.Mode]:
                     #calculate the actual and set fields
                     (success, self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised)  \
-                        = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.actual_current, self.set_current, is_sole=False)
+                        = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho, self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.actual_measurement, self.set_point, is_sole=False)
                     if success==False:
-                        self.status_str_b = "Cannot interpolate read/set currents %f/%f " % (self.actual_current,self.set_current)
+                        self.status_str_b = "Cannot interpolate read/set currents %f/%f " % (self.actual_measurement,self.set_point)
                         self.field_out_of_range = True
                     return True
                 else: #if not calib data, can read current but not field
@@ -452,15 +452,15 @@ class TrimCircuit (PyTango.Device_4Impl):
 
     def set_ps_current(self):
         #Set the current on the ps
-        if self.set_current > self.maxcurrent:
-            self.debug_stream("Requested current %f above limit of PS (%f)" % (self.set_current,self.maxcurrent))
-            self.set_current = self.maxcurrent
-        if self.set_current < self.mincurrent:
-            self.debug_stream("Requested current %f below limit of PS (%f)" % (self.set_current,self.mincurrent))
-            self.set_current = self.mincurrent
-        self.debug_stream("SETTING CURRENT ON THE PS TO: %f ", self.set_current)
+        if self.set_point > self.max_setpoint_value:
+            self.debug_stream("Requested current %f above limit of PS (%f)" % (self.set_point,self.max_setpoint_value))
+            self.set_point = self.max_setpoint_value
+        if self.set_point < self.min_setpoint_value:
+            self.debug_stream("Requested current %f below limit of PS (%f)" % (self.set_point,self.min_setpoint_value))
+            self.set_point = self.min_setpoint_value
+        self.debug_stream("SETTING CURRENT ON THE PS TO: %f ", self.set_point)
         try:
-            self.ps_device.write_attribute("Current", self.set_current)
+            self.ps_device.write_attribute("Current", self.set_point)
         except PyTango.DevFailed as e:
             self.status_str_ps = "Cannot set current on PS" + self.PowerSupplyProxy
 
@@ -474,21 +474,21 @@ class TrimCircuit (PyTango.Device_4Impl):
         self.get_swb_mode()
         attr.set_value(self.Mode)
 
-    def read_currentSet(self, attr):
-        self.debug_stream("In read_currentSet()")
-        attr.set_value(self.set_current)
+    def read_PowerSupplySetPoint(self, attr):
+        self.debug_stream("In read_PowerSupplySetPoint()")
+        attr.set_value(self.set_point)
 
-    def is_currentSet_allowed(self, attr):
+    def is_PowerSupplySetPoint_allowed(self, attr):
         return self.get_current_and_field()
        
     #
 
-    def read_currentActual(self, attr):
-        self.debug_stream("In read_currentActual()")
-        attr.set_value(self.actual_current)
+    def read_PowerSupplyReadValue(self, attr):
+        self.debug_stream("In read_PowerSupplyReadValue()")
+        attr.set_value(self.actual_measurement)
 
-    def is_currentActual_allowed(self, attr):
-        self.debug_stream("In is_currentActual_allowed()")
+    def is_PowerSupplyReadValue_allowed(self, attr):
+        self.debug_stream("In is_PowerSupplyReadValue_allowed()")
         return self.get_current_and_field()
 
     #
@@ -568,7 +568,7 @@ class TrimCircuit (PyTango.Device_4Impl):
             else:
                 self.fieldA[self.allowed_component]  = self.MainFieldComponent_r * self.BRho * sign
 
-            self.set_current \
+            self.set_point \
                 = calculate_setpoint(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.fieldA, self.fieldB, False)
             ###########################################################
             #Set the current on the ps
@@ -576,7 +576,7 @@ class TrimCircuit (PyTango.Device_4Impl):
         else:
             self.debug_stream("Energy changed: will recalculate fields for the PS current")
             (success, self.MainFieldComponent_r, self.MainFieldComponent_w, self.fieldA, self.fieldANormalised, self.fieldB, self.fieldBNormalised) \
-                = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.actual_current, self.set_current, is_sole=False)
+                = calculate_fields(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.actual_measurement, self.set_point, is_sole=False)
 
 
     def is_energy_allowed(self, attr):
@@ -617,7 +617,7 @@ class TrimCircuit (PyTango.Device_4Impl):
         else:
             self.fieldA[self.allowed_component]  = self.MainFieldComponent_w * self.BRho * sign
 
-        self.set_current \
+        self.set_point \
             = calculate_setpoint(self.allowed_component, self.currentsmatrix[self.Mode], self.fieldsmatrix[self.Mode], self.BRho,  self.PolTimesOrient, self.Tilt, self.Mode, self.Length, self.fieldA, self.fieldB, False)
         ###########################################################
         #Set the current on the ps
@@ -703,7 +703,7 @@ class TrimCircuitClass(PyTango.DeviceClass):
              'label': "SWB mode",
              'doc': "Mode as set in the SWB device. Can be: SEXTUPOLE, NORMAL_QUADRUPOLE, SKEW_QUADRUPOLE, X_CORRECTOR, Y_CORRECTOR"
          } ],
-        'currentSet':
+        'PowerSupplySetPoint':
         [[PyTango.DevFloat,
           PyTango.SCALAR,
           PyTango.READ],
@@ -713,7 +713,7 @@ class TrimCircuitClass(PyTango.DeviceClass):
              'doc': "Set current on PS (attribute write value)",
              'format': "%6.5f"
          } ],
-        'currentActual':
+        'PowerSupplyReadValue':
         [[PyTango.DevFloat,
           PyTango.SCALAR,
           PyTango.READ],

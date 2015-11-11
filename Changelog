@@ -163,3 +163,9 @@
 	* Only instantiate trim circuits in the ring
 	* Fix for case that magnets have no calibration, only circuits
 	* v1.7.4
+
+11-11-2015 Paul Bell
+	* Change attribute names for current in TrimCircuit to be same as MainCircuit
+	* (Since panel expects same names)
+	* To deploy in linac and ring, unifying both systems
+	* v2.0.0
