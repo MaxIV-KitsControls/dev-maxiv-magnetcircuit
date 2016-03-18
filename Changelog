@@ -169,3 +169,7 @@
 	* (Since panel expects same names)
 	* To deploy in linac and ring, unifying both systems
 	* v2.0.0
+
+18-03-2016 Paul Bell
+	* Fix state handling in magnet device according to states of main and trim circuits
+	* v2.0.1

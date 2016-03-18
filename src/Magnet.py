@@ -313,10 +313,17 @@ class Magnet(PyTango.Device_4Impl):
             self.set_state(self.get_main_circuit_state())
             #
             # maybe also a trim coil
-            if self.applyTrim:
-                if self.get_state() not in [PyTango.DevState.FAULT, PyTango.DevState.UNKNOWN]:
-                    if self.TrimCoil != None:
-                        self.set_state(self.get_trim_circuit_state())
+            if self.applyTrim and self.TrimCoil != None:
+                #check the main circuit state
+                main_state = self.get_main_circuit_state()
+                #check the trim circuit state
+                trim_state = self.get_trim_circuit_state()
+                #make use of Tango enum to set whatever is the highest state (On=0, Off=1,... Unknown=13)
+                if int(trim_state)>int(main_state):
+                    self.set_state(trim_state)
+                else:
+                    self.set_state(main_state)
+                #note that alarm is higher state than fault
             else:
                 self.status_str_trm = "Trim field not applied"
 
