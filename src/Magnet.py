@@ -69,14 +69,10 @@ class Magnet(PyTango.Device_4Impl):
         self.is_sole = False  # hack for solenoids until configured properly
         self.field_out_of_range = False
 
-        # boolean if magnet is controlled by voltage
-        self.is_voltage_controlled = False
-        self.physical_quantity_controlled = "current"
-
         # get trim and main coil proxies
-        self._main_circuit_device = None
+        self._main_circuit_devices = []  #In R1 can be several circuits
         self._trim_circuit_device = None
-        self.MainCoil = None
+        self.MainCoils = []
         self.TrimCoil = None
         self.get_coil_proxies()
 
@@ -94,10 +90,22 @@ class Magnet(PyTango.Device_4Impl):
         self.bad_Ilock_config = False
         self.get_interlock_config()
 
-        # configure magnet type, needed to calculate fields
-        self.allowed_component = 0
+        # configure magnet type and tilt, needed to calculate fields
+        self.allowed_component_v = []
+        self.tilt_v = []
+        self.highest_component = 0
         self.configure_type()
 
+        print "----------------------------------------------------"
+        print   self.allowed_component_v
+        print   self.MainCoils
+        print   self.tilt_v
+        print self.Tilt
+        print self.Type
+
+        # boolean if magnet is controlled by voltage
+        self.is_voltage_controlled = False
+        self.physical_quantity_controlled = "current"
         if self.is_voltage_controlled:
             self.excitation_curve_setpoints = self.ExcitationCurveVoltages
             self.physical_quantity_controlled = "voltage"
@@ -107,7 +115,7 @@ class Magnet(PyTango.Device_4Impl):
         # process the calibration data into useful numpy arrays
         (self.hasCalibData, self.status_str_cfg, self.fieldsmatrix, self.ps_setpoint_matrix) \
             = process_calibration_data(self.excitation_curve_setpoints, self.ExcitationCurveFields,
-                                       self.allowed_component)
+                                       self.highest_component)
 
         # option to disable use of trim coils
         self.applyTrim = True
@@ -117,33 +125,34 @@ class Magnet(PyTango.Device_4Impl):
     def get_coil_proxies(self):
 
         # CircuitProxies property can contain main and trim coil
-        if len(self.CircuitProxies) == 1 and "CRT" not in self.CircuitProxies[0]:
-            self.MainCoil = self.CircuitProxies[0]
-        elif len(self.CircuitProxies) == 2:
-            if "CRT" in self.CircuitProxies[0]:
-                self.TrimCoil = self.CircuitProxies[0]
-                self.MainCoil = self.CircuitProxies[1]
-            elif "CRT" in self.CircuitProxies[1]:
-                self.TrimCoil = self.CircuitProxies[1]
-                self.MainCoil = self.CircuitProxies[0]
+        for proxy in self.CircuitProxies:
+            if "CRT" not in proxy:
+                self.MainCoils.append(proxy)
+            else:
+                self.TrimCoil = proxy #assume only one trim coil given
+        if len(self.MainCoils)>0:
+            self.debug_stream("Found %i main circuits" % len(self.MainCoils))
         else:
-            self.debug_stream("Invalid coil proxy config")
-            self.MainCoil = None
+            self.debug_stream("Did not find a main circuit proxy property")
+            self.MainCoils = []
             self.TrimCoil = None
-        self.debug_stream("Magnet main coil: %s " % self.MainCoil)
+        print "pjbxxx ", self.MainCoils
+        self.debug_stream("Magnet main coil (first): %s " % self.MainCoils[0])
         self.debug_stream("Magnet trim coil: %s " % self.TrimCoil)
 
     ###############################################################################
     #
     @property
-    def main_circuit_device(self):
-        if self._main_circuit_device is None:
-            try:
-                self._main_circuit_device = PyTango.DeviceProxy(self.MainCoil)
-            except (PyTango.DevFailed, PyTango.ConnectionFailed) as df:
-                self.debug_stream("Failed to get main circuit proxy\n" + df[0].desc)
-                self.set_state(PyTango.DevState.FAULT)
-        return self._main_circuit_device
+    def main_circuit_devices(self):
+        if self._main_circuit_devices == []:
+            for proxy in self.MainCoils:
+                try:
+                    self._main_circuit_devices.append(PyTango.DeviceProxy(proxy))
+                except (PyTango.DevFailed, PyTango.ConnectionFailed) as df:
+                    self.debug_stream("Failed to get main circuit proxy\n" + df[0].desc)
+                    self.set_state(PyTango.DevState.FAULT)
+        print "---- xxx1 ", len(self._main_circuit_devices)
+        return self._main_circuit_devices
 
     ###############################################################################
     #
@@ -182,24 +191,52 @@ class Magnet(PyTango.Device_4Impl):
     ###############################################################################
     #
     def configure_type(self):
+
+        #set highest component according to type
         if self.Type == "kquad":
-            self.allowed_component = 1
+            self.highest_component = 1
         elif self.Type == "ksext":
-            self.allowed_component = 2
+            self.highest_component = 2
         elif self.Type == "koct":
-            self.allowed_component = 3
+            self.highest_component = 3
         elif self.Type in ["hkick", "vkick", "csrcsbend", "sben", "rben", "sbend"]:
-            self.allowed_component = 0
+            self.highest_component = 0
         elif self.Type == "sole":
-            self.allowed_component = 0
+            self.highest_component = 0
             self.is_sole = True
         elif self.Type == "bumper":
-            self.allowed_component = 0
+            self.highest_component = 0
             self.is_voltage_controlled = True
         else:
             self.status_str_cfg = 'Magnet type invalid %s' % self.Type
             self.debug_stream(self.status_str_cfg)
             self.set_state(PyTango.DevState.FAULT)
+            return
+
+        #set components of possible trim circuits
+        #PJB ugly since could read the type and tile as circuit properties instead?
+        self.allowed_component_v.append(self.highest_component)
+        self.tilt_v.append(self.Tilt)
+        if len(self.MainCoils) > 1:
+            iterproxies = iter(self.MainCoils)
+            next(iterproxies)
+            print "configuring types for trims"
+            for proxy in iterproxies:
+                print "-- ", proxy
+                if "COY" in proxy:
+                    self.allowed_component_v.append(0)
+                    self.tilt_v.append(90)
+                elif "COX" in proxy:
+                    self.allowed_component_v.append(0)
+                    self.tilt_v.append(0) 
+                elif "SK" in proxy:
+                    self.allowed_component_v.append(1)
+                    self.tilt_v.append(45)
+                else:
+                    self.status_str_cfg = 'Magnet circuit type invalid %s' % proxy
+                    self.debug_stream(self.status_str_cfg)
+                    self.set_state(PyTango.DevState.FAULT)
+                    return
 
     ###############################################################################
     #
@@ -229,55 +266,79 @@ class Magnet(PyTango.Device_4Impl):
 
     ###############################################################################
     #
-    def get_main_circuit_state(self):
+    def get_main_circuit_states(self):
 
-        self.debug_stream("In get_main_circuit_state()")
-        if self.main_circuit_device:
-            try:
-                cir_state = self.main_circuit_device.read_attribute("State").value
-                self.status_str_cir = "Connected to main circuit %s in state %s " % (self.MainCoil, cir_state)
-            except (AttributeError, PyTango.DevFailed) as e:
-                self.status_str_cir = "Cannot get state of main circuit device " + self.MainCoil
-                self.debug_stream(self.status_str_cir)
-                return PyTango.DevState.FAULT
+        self.debug_stream("In get_main_circuit_states()") 
+        self.status_str_cir = ""
+        cir_state = []
+
+        print "-----xxx ", len(self.main_circuit_devices)
+        if self.main_circuit_devices != []:
+            circuit_number = -1
+            for circuit in self.main_circuit_devices:
+                try:
+                    circuit_number+=1
+                    thisstate = (circuit.read_attribute("State").value)
+                    cir_state.append(thisstate)
+                    self.status_str_cir += ("Connected to circuit %i %s in state %s\n" % (circuit_number, self.MainCoils[circuit_number], thisstate))
+                except (AttributeError, PyTango.DevFailed) as e:
+                    print e
+                    self.status_str_cir = "Cannot get state of main circuit device " + self.MainCoils[circuit_number]
+                    self.debug_stream(self.status_str_cir)
+                    return PyTango.DevState.FAULT
         else:
-            self.status_str_cir = "Cannot get proxy to main coil " + self.MainCoil
+            self.status_str_cir = "Cannot get proxies for main coils"
             cir_state = PyTango.DevState.FAULT
-        return cir_state
+        #return worst state of main circuit
+        print  self.status_str_cir
+        return max(cir_state)
 
     ###############################################################################
     #
     def get_main_physical_quantity_and_field(self):
+        
         self.debug_stream("In get_main_physical_quantity_and_field()")
-        if self.main_circuit_device:
-            try:
-                self.debug_stream("Will read {0} from main circuit".format(self.physical_quantity_controlled))
-                physical_quantity = self.main_circuit_device.PowerSupplyReadValue
-                self.debug_stream("Will read BRho from main circuit")
-                BRho = self.main_circuit_device.BRho
-                self.status_str_b = ""
+        self.status_str_b = ""
 
-            except (AttributeError, PyTango.DevFailed) as e:
-                self.debug_stream(
-                    "Cannot get state or {0} from circuit device {1}".format(self.physical_quantity_controlled,
-                                                                             self.MainCoil))
-                return False
-            else:
+        if self.main_circuit_devices != []:
+            circuit_number = -1
+            for circuit in self.main_circuit_devices:
+                try:
+                    circuit_number+=1
+                    self.debug_stream("Will read {0} from main circuit".format(self.physical_quantity_controlled))
+                    physical_quantity = circuit.PowerSupplyReadValue
+                    self.debug_stream("Will read BRho from main circuit")
+                    BRho = circuit.BRho
+                    self.status_str_b = ""
 
-                (success, MainFieldComponent_r, MainFieldComponent_w, self.fieldA_main, self.fieldANormalised_main,
-                 self.fieldB_main, self.fieldBNormalised_main) \
-                    = calculate_fields(self.allowed_component, self.ps_setpoint_matrix, self.fieldsmatrix, BRho,
-                                       self.PolTimesOrient, self.Tilt, self.Type, self.Length, physical_quantity, None,
-                                       self.is_sole)
+                except (AttributeError, PyTango.DevFailed) as e:
+                    self.debug_stream(
+                        "Cannot get state or {0} from circuit device {1}".format(self.physical_quantity_controlled,
+                                                                                 self.MainCoils[circuit_number]))
+                    return False
+                else:
 
-                self.field_out_of_range = False
-                if success == False:
-                    self.status_str_b = "Cannot interpolate read {0} {1}".format(self.physical_quantity_controlled,
+                    (success, MainFieldComponent_r, MainFieldComponent_w, self.fieldA_main, self.fieldANormalised_main,
+                     self.fieldB_main, self.fieldBNormalised_main) \
+                        = calculate_fields(self.allowed_component_v[circuit_number], 
+                                           self.ps_setpoint_matrix, self.fieldsmatrix, 
+                                           BRho, self.PolTimesOrient, 
+                                           self.tilt_v[circuit_number], self.Type[circuit_number], 
+                                           self.Length, 
+                                           physical_quantity, 
+                                           None,
+                                           self.is_sole)
+
+                    print "CALCULATED FIELD ", self.fieldB_main
+
+                    self.field_out_of_range = False
+                    if success == False:
+                        self.status_str_b = "Cannot interpolate read {0} {1}".format(self.physical_quantity_controlled,
                                                                                  physical_quantity)
-                    self.field_out_of_range = True
-                return True
+                        self.field_out_of_range = True
+                        return True
         else:
-            self.debug_stream("Cannot get proxy to main coil " + self.MainCoil)
+            self.debug_stream("Cannot get proxies for main coils")
             return False
 
     ###############################################################################
@@ -305,17 +366,17 @@ class Magnet(PyTango.Device_4Impl):
         self.debug_stream("In always_excuted_hook()")
 
         # There should be a main coil
-        if self.MainCoil == None:
+        if self.MainCoils == []:
             self.set_state(PyTango.DevState.FAULT)
-            self.status_str_cir = "No main coil defined in properties"
+            self.status_str_cir = "No main coil(s) defined in properties"
         else:
             # set state according to main circuit state
-            self.set_state(self.get_main_circuit_state())
+            self.set_state(self.get_main_circuit_states())
             #
             # maybe also a trim coil
             if self.applyTrim and self.TrimCoil != None:
                 #check the main circuit state
-                main_state = self.get_main_circuit_state()
+                main_state = self.get_main_circuit_states()
                 #check the trim circuit state
                 trim_state = self.get_trim_circuit_state()
                 #make use of Tango enum to set whatever is the highest state (On=0, Off=1,... Unknown=13)
@@ -624,7 +685,7 @@ def main():
         U = PyTango.Util.instance()
 
         #Trim circuit class needed for ring magnets only, not linac
-        if U.get_ds_name().split("/")[1].startswith("R"):
+        if U.get_ds_name().split("/")[1].startswith("R3"):
             py.add_class(TrimCircuitClass, TrimCircuit, 'TrimCircuit')
 
         U.server_init()
