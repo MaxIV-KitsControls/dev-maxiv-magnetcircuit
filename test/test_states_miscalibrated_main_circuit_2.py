@@ -76,5 +76,5 @@ class MagnetCircuitTestCase(DeviceTestCase):
     def test_status_shows_calibration_bad(self):
         print "Test 1"
         #print self.device.Status()
-        self.assertIn("different number of measurement points in field and current data", self.device.Status())
+        self.assertIn("different number of measurement points in field and set point data", self.device.Status())
 

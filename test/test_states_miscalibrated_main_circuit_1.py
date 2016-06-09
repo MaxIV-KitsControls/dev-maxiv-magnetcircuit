@@ -33,7 +33,7 @@ class MagnetCircuitTestCase(DeviceTestCase):
         "ExcitationCurveFields": [
             "[1.0, 0.0]",
             "[2.0, 0.0]",
-            "[4.0, 1.0]", 
+            "[4.0, 1.0]",
             "[4.0, 0.0]"
 
         ],
@@ -78,6 +78,6 @@ class MagnetCircuitTestCase(DeviceTestCase):
     def test_status_shows_calibration_bad(self):
         print "Test 1"
         #print self.device.Status()
-        self.assertIn("different number of multipoles in field and current data", self.device.Status())
+        self.assertIn("different number of multipoles in field and set point data", self.device.Status())
 
 
