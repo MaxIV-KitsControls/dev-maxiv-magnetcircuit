@@ -89,7 +89,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.get_device_properties(self.get_device_class())
 
         # energy attribute eventually to be set by higher level device
-        self.energy_r = 3000000000.0  # =100 MeV for testing, needs to be read from somewhere
+        self.energy_r = 3000000000.0  # =100 MeV for testing,
         self.energy_w = None
         self.calculate_brho()  # a conversion factor that depends on energy
 
@@ -746,13 +746,14 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
     def read_IntMainFieldComponent(self, attr):
         self.debug_stream("In read_IntMainFieldComponent()")
-        if self.hasCalibData == True:
-            attr_IntMainFieldComponent_read = self.MainFieldComponent_r * self.Length
-            attr.set_value(attr_IntMainFieldComponent_read)
+        if self.hasCalibData:
+            main_field_component = self.MainFieldComponent_r * self.Length
+            attr.set_value(main_field_component)
             attr.set_quality(self.IntFieldQ)
 
     def is_IntMainFieldComponent_allowed(self, attr):
-        return self.get_main_physical_quantity_and_field() and not self.field_out_of_range
+        quantity_and_field = self.get_main_physical_quantity_and_field()
+        return quantity_and_field and not self.field_out_of_range
 
     #
     def read_CyclingStatus(self, attr):
