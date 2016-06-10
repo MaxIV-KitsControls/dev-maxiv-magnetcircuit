@@ -56,8 +56,13 @@ class MagnetCycling(object):
             # Stop any action
             self.stop()
 
+    @property
+    def cycling_errors(self):
+        return "/n".join(map(str, self.error_stack))
+
     def start(self):
         self.stop()
+        self.error_stack.clear()
         # Start the ramping
         self.cycling_stop.clear()
         self.statemachine = ConditioningState(
