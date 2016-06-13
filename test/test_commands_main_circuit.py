@@ -84,7 +84,10 @@ class MagnetCircuitTestCase(DeviceTestCase):
     @classmethod
     def mocking(cls):
         """ mock """
-        cls.magnetcicling = MagnetCircuit.MagnetCycling = MagicMock()
+
+        cls.magnetcycling = MagicMock()
+        cls.magnetcycling.return_value = cls.magnetcycling
+        MagnetCircuit.MagnetCycling = cls.magnetcycling
 
         def make_proxy():
             """ mock device proxy, set it to ON state"""
@@ -122,11 +125,8 @@ class MagnetCircuitTestCase(DeviceTestCase):
             return mock_proxy
 
         def proxy_result(devname):
-            print "PROXY RESULT:: ", devname
             if devname in cls.magnets:
-                print "-MAGNET", cls.magnet_proxies[devname].State()
                 return cls.magnet_proxies[devname]
-            print "-PS ", cls.ps_proxy.State()
             return cls.ps_proxy
 
         # create power supply mock
@@ -140,12 +140,6 @@ class MagnetCircuitTestCase(DeviceTestCase):
         MagnetCircuit.PyTango.DeviceProxy = cls.device_proxy
 
     def assertState(self, expected):
-        print MagnetCircuit
-        print self.device.State()
-        return
-        print self.device
-        for m in dir(self.device):
-            print m
         present = self.device.state()
         err_msg = "present state: %s, expected state: %s" % (present, expected)
         self.assertEqual(present, expected, err_msg)
@@ -154,7 +148,7 @@ class MagnetCircuitTestCase(DeviceTestCase):
         # write attribute method
         write_attr = partial(self.device.write_attribute, attr_name)
         # read attribute method
-        read_attr = lambda : self.device.read_attribute(attr_name).w_value
+        read_attr = lambda: self.device.read_attribute(attr_name).w_value
         # basic assert msg
         err_msg = "present {}: {}, expected : {}"
         # write value to attribute and then read it
@@ -165,10 +159,11 @@ class MagnetCircuitTestCase(DeviceTestCase):
         self.assertEqual(read, set_value, msg)
         # while cycling, writing a value do nothing
         self.device.StartCycle()
+        self.assertState(PyTango.DevState.RUNNING)
         with self.assertRaises(PyTango.DevFailed) as context:
             write_attr(other_value)
         expected_message = "It is currently not allowed to write attribute "
-        expected_message += "%s. The device state is ON" % (attr_name)
+        expected_message += "%s. The device state is RUNNING" % (attr_name)
         self.assertIn(expected_message, str(context.exception))
         read = read_attr()
         msg = err_msg.format(attr_name, read, set_value)
@@ -202,3 +197,27 @@ class MagnetCircuitTestCase(DeviceTestCase):
     def test_CyclingSteps(self):
         " set/read cycling steps "
         self.cycling_attribute("CyclingSteps", 12, 13)
+
+    def test_CyclingErrors(self):
+        assert "Errors" not in self.device.status()
+        self.assertState(PyTango.DevState.ON)
+        self.device.StartCycle()
+        self.magnetcycling.phase = "Cycling"
+        self.assertState(PyTango.DevState.RUNNING)
+        assert "Errors" not in self.device.status()
+        err_msg = "Put your exception message here"
+        self.magnetcycling.cycling_errors = err_msg
+        status = self.device.Status()
+        print status, self.device, self.device.State()
+        assert "Errors" in status
+        assert err_msg in status
+        self.device.StopCycle()
+        self.assertState(PyTango.DevState.ON)
+        status = self.device.status()
+        assert "Errors" in status
+        assert err_msg in status
+        self.magnetcycling.cycling_errors = ""
+        self.device.StartCycle()
+        status = self.device.status()
+        assert "Errors" not in status
+        assert err_msg not in status
