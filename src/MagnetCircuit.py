@@ -115,6 +115,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.field_out_of_range = False
         self.iscycling = False
         self.cyclingphase = "Cycling not set up"
+        self.cycling_errors = ""
         self.IntFieldQ = PyTango.AttrQuality.ATTR_VALID
         self.is_sole = False  # hack for solenoids until configured properly
         self.is_corr = False  # correctors differ from dipoles (theta vs Theta)
@@ -528,8 +529,10 @@ class MagnetCircuit(PyTango.Device_4Impl):
     def check_cycling_status(self):
         if self._cycler is None:
             self.cyclingphase = "Cycling not set up"
+            self.cycling_errors = ""
         else:
             self.cyclingphase = self._cycler.phase
+            self.cycling_errors =  self._cycler.cycling_errors
 
     def dev_status(self):
 
@@ -542,6 +545,8 @@ class MagnetCircuit(PyTango.Device_4Impl):
         msg = self.status_str_prop + "\n" + self.status_str_cfg + "\n" + self.status_str_cal + "\n" + \
               self.status_str_ps + "\n" + self.status_str_b + "\n" + self.status_str_cyc + "\nCycling status: " + \
               self.cyclingphase
+        if self.cycling_errors:
+            msg += "\n/!\\Errors durring cycling : " + self.cycling_errors
         self.status_str_fin = os.linesep.join([s for s in msg.splitlines() if s])
         return self.status_str_fin
 
