@@ -88,7 +88,7 @@ class MagnetCycling(object):
     @property
     def phase(self):
         """Get the 'phase' of the conditioning; a high-level state"""
-        if not self.statemachine:
+        if not self.statemachine or not self.cycling_thread.isAlive():
             return "NOT CYCLING (limits are %s %s %s)" % (
                 self.lo_set_point, self.hi_set_point, self.unit)
         return (self.statemachine.state + self.statemachine.iterationstatus)
