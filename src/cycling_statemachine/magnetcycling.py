@@ -58,7 +58,7 @@ class MagnetCycling(object):
 
     @property
     def cycling_errors(self):
-        return "/n".join(map(str, self.error_stack))
+        return "/n".join(set(map(str, self.error_stack)))
 
     def start(self):
         self.stop()
