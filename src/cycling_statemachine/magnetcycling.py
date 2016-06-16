@@ -56,6 +56,12 @@ class MagnetCycling(object):
             # Stop any action
             self.stop()
 
+    def is_running(self):
+        try:
+            return self.cycling_thread.is_alive()
+        except AttributeError:
+            return False
+
     @property
     def cycling_errors(self):
         return "/n".join(set(map(str, self.error_stack)))

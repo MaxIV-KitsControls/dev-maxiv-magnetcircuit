@@ -138,6 +138,7 @@ class MagnetCircuitTestCase(DeviceTestCase):
         # mock DeviceProxy method to return magnets mocks or ps mock
         cls.device_proxy = MagicMock(side_effect=proxy_result)
         MagnetCircuit.PyTango.DeviceProxy = cls.device_proxy
+        cls.magnetcycling.is_running.return_value = False
 
     def assertState(self, expected):
         present = self.device.state()
@@ -208,7 +209,6 @@ class MagnetCircuitTestCase(DeviceTestCase):
         err_msg = "Put your exception message here"
         self.magnetcycling.cycling_errors = err_msg
         status = self.device.Status()
-        print status, self.device, self.device.State()
         assert "Errors" in status
         assert err_msg in status
         self.device.StopCycle()

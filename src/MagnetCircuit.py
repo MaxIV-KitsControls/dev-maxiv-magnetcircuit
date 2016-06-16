@@ -82,6 +82,8 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
     def delete_device(self):
         self.debug_stream("In delete_device()")
+        if self._cycler:
+            self._cycler.stop()
 
     def init_device(self):
         self.debug_stream("In init_device()")
@@ -523,6 +525,12 @@ class MagnetCircuit(PyTango.Device_4Impl):
     def check_cycling_state(self):
         # see if reached end of cycle
         self.check_cycling_status()
+        try:
+            if self._cycler.is_running():
+                self.iscycling = True
+                return
+        except AttributeError:
+            pass
         if self.iscycling == True and "NOT CYCLING" in self.cyclingphase:
             self.iscycling = False
 
@@ -771,6 +779,11 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.debug_stream("In read_CyclingState()")
         # need to check cycling state
         self.check_cycling_state()
+        try:
+            if self._cycler.is_running():
+                attr.set_value(True)
+        except AttributeError:
+            pass
         attr.set_value(self.iscycling)
 
     def write_CyclingRampTime(self, attr):
