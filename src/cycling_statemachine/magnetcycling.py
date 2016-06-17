@@ -42,6 +42,8 @@ class MagnetCycling(object):
         self.cycling_stop = Event()  # Set when aborting.
         self.statemachine = None
         self.error_stack = deque(maxlen=10)
+        self.cycling_interrupted = False
+        self.cycling_ended = False
 
     @property
     def cycling(self):
@@ -101,10 +103,22 @@ class MagnetCycling(object):
 
     def ramp(self, dt=0.001):
         """The main loop for one cycling run."""
+        self.cycling_ended = False
+        self.cycling_interrupted = False
         while not (self.statemachine.finished or self.cycling_stop.isSet()):
             with tick_context(dt, sleep=self.cycling_stop.wait):
                 try:
                     self.statemachine.proceed()
                 except DevFailed as e:
                     self.error_stack.append(e)
+                except Exception as e:
+                    msg = "The following exception was unexcpected and stop the "
+                    msg += "cycling:\n {} \n".format(e)
+                    self.error_stack.append(msg)
+                    self.statemachine = None
+                    raise e
+        finished = self.statemachine.finished
+        interupted = self.cycling_stop.isSet()
+        self.cycling_ended = finished
+        self.cycling_interrupted = interupted and not finished
         self.statemachine = None

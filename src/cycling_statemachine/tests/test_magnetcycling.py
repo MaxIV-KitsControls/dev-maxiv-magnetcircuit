@@ -66,10 +66,26 @@ class MagnetCyclingStateMachineTestCase(unittest.TestCase):
 
     def test_cycling(self):
         " statemachine finished. "
+        assert not self.magnetcycling.cycling_ended
+        assert not self.magnetcycling.cycling_interrupted
         assert self.magnetcycling.cycling
         assert self.magnetcycling.cycling_thread.is_alive()
         self.statemachine.finished = True
         sleep(LOOP)
+        assert self.magnetcycling.cycling_ended
+        assert not self.magnetcycling.cycling_interrupted
+        assert not self.magnetcycling.cycling_thread.is_alive()
+        self.statemachine.finished = False
+        self.magnetcycling.cycling = True
+        # test interruption
+        assert not self.magnetcycling.cycling_ended
+        assert not self.magnetcycling.cycling_interrupted
+        assert self.magnetcycling.cycling
+        assert self.magnetcycling.cycling_thread.is_alive()
+        self.magnetcycling.cycling = False
+        sleep(LOOP)
+        assert not self.magnetcycling.cycling_ended
+        assert self.magnetcycling.cycling_interrupted
         assert not self.magnetcycling.cycling_thread.is_alive()
 
     def test_exception(self):

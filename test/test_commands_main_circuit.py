@@ -201,23 +201,43 @@ class MagnetCircuitTestCase(DeviceTestCase):
 
     def test_CyclingErrors(self):
         assert "Errors" not in self.device.status()
+        self.magnetcycling.error_stack = []
         self.assertState(PyTango.DevState.ON)
         self.device.StartCycle()
         self.magnetcycling.phase = "Cycling"
         self.assertState(PyTango.DevState.RUNNING)
         assert "Errors" not in self.device.status()
+        print self.device.CyclingHasErrors
+        assert not self.device.CyclingHasErrors
         err_msg = "Put your exception message here"
+        self.magnetcycling.error_stack = [err_msg]
         self.magnetcycling.cycling_errors = err_msg
         status = self.device.Status()
+        assert self.device.CyclingHasErrors
         assert "Errors" in status
         assert err_msg in status
         self.device.StopCycle()
         self.assertState(PyTango.DevState.ON)
         status = self.device.status()
         assert "Errors" in status
+        assert self.device.CyclingHasErrors
         assert err_msg in status
         self.magnetcycling.cycling_errors = ""
+        self.magnetcycling.error_stack = []
         self.device.StartCycle()
         status = self.device.status()
         assert "Errors" not in status
         assert err_msg not in status
+        assert not self.device.CyclingHasErrors
+
+    def test_CyclingCompleted(self):
+        self.magnetcycling.cycling_ended = False
+        assert not self.device.CyclingCompleted
+        self.magnetcycling.cycling_ended = True
+        assert self.device.CyclingCompleted
+
+    def test_CyclingInterrupted(self):
+        self.magnetcycling.cycling_interrupted = False
+        assert not self.device.CyclingInterrupted
+        self.magnetcycling.cycling_interrupted = True
+        assert self.device.CyclingInterrupted

@@ -854,6 +854,15 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.debug_stream("In write_CyclingSteps()")
         self._cycler.steps = attr.get_write_value()
 
+    def read_CyclingInterrupted(self, attr):
+        attr.set_value(self._cycler.cycling_interrupted)
+
+    def read_CyclingCompleted(self, attr):
+        attr.set_value(self._cycler.cycling_ended)
+
+    def read_CyclingHasErrors(self, attr):
+        attr.set_value(bool(len(self._cycler.error_stack)))
+
     def is_CyclingSteps_allowed(self, attr):
         self.check_cycling_state()
         if attr == PyTango.AttReqType.WRITE_REQ:
@@ -1080,6 +1089,30 @@ class MagnetCircuitClass(PyTango.DeviceClass):
              {
                  'label': "Cycling State",
                  'doc': "state of cycling procedure"
+             }],
+        'CyclingInterrupted':
+            [[PyTango.DevBoolean,
+              PyTango.SCALAR,
+              PyTango.READ],
+             {
+                 'label': "Cycling Interrupted",
+                 'doc': "True if the cycling has been interrupted"
+             }],
+        'CyclingCompleted':
+            [[PyTango.DevBoolean,
+              PyTango.SCALAR,
+              PyTango.READ],
+             {
+                 'label': "Cycling Conpleted",
+                 'doc': "True if the cycling has been done completly"
+             }],
+        'CyclingHasErrors':
+            [[PyTango.DevBoolean,
+              PyTango.SCALAR,
+              PyTango.READ],
+             {
+                 'label': "Cycling has errors",
+                 'doc': "True if some errors have been raised while cycling"
              }],
         'CyclingRampTime':
             [[PyTango.DevDouble,
