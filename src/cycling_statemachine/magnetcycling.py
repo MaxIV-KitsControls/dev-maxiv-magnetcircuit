@@ -115,6 +115,7 @@ class MagnetCycling(object):
                     msg = "The following exception was unexcpected and stop the "
                     msg += "cycling:\n {} \n".format(e)
                     self.error_stack.append(msg)
+                    self.cycling_interrupted = True
                     self.statemachine = None
                     raise e
         finished = self.statemachine.finished
