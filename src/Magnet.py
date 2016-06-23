@@ -186,11 +186,11 @@ class Magnet(PyTango.Device_4Impl):
         # This is a list of three strings of the form [(device,attribute,description),(dev,att,desc)...]
         # First entry is on tag, second is off tag, third is status tag
         # First see if we gave any shunt information in the property
-        if self.ShuntGroupTags != [""]:
-            if len(self.ShuntGroupTags) == 3:
-                on_info = self.ShuntGroupTags[0]
-                off_info = self.ShuntGroupTags[1]
-                stat_info = self.ShuntGroupTags[2]
+        if self.ShuntResistanceTags != [""]:
+            if len(self.ShuntResistanceTags) == 3:
+                on_info = self.ShuntResistanceTags[0]
+                off_info = self.ShuntResistanceTags[1]
+                stat_info = self.ShuntResistanceTags[2]
                 try:
                     self.shunt_on_proxy = PyTango.AttributeProxy(on_info.split(",")[0] + "/" + on_info.split(",")[1])
                     self.shunt_off_proxy = PyTango.AttributeProxy(off_info.split(",")[0] + "/" + off_info.split(",")[1])
@@ -671,9 +671,9 @@ class MagnetClass(PyTango.DeviceClass):
             [PyTango.DevVarStringArray,
              "TemperatureInterlock",
              [""]],
-        'ShuntGroupTags':
+        'ShuntResistanceTags':
             [PyTango.DevVarStringArray,
-             "ShunGroupTags",
+             "ShuntResistanceTags",
              [""]],
         # PJB I use strings below since I can't have a 2d array of floats?
         # So now I end up with a list of lists instead. See above for conversion.

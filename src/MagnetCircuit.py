@@ -895,15 +895,15 @@ class MagnetCircuitClass(PyTango.DeviceClass):
         'ExcitationCurveCurrents':
             [PyTango.DevVarStringArray,
              "Measured calibration currents for each multipole",
-             [[]]],
+             []],
         'ExcitationCurveVoltages':
             [PyTango.DevVarStringArray,
              "Measured calibration voltages for each multipole",
-             [[]]],
+             []],
         'ExcitationCurveFields':
             [PyTango.DevVarStringArray,
              "Measured calibration fields for each multipole",
-             [[]]],
+             []],
         'PowerSupplyProxy':
             [PyTango.DevString,
              "Associated powersupply",
