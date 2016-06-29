@@ -1,13 +1,14 @@
 from contextlib import contextmanager
 from timeit import default_timer as time
-
+from PyTango import DevFailed
 from threading import Thread, Event
 from time import sleep
 from cond_state import MagnetCycling as ConditioningState
-
-
+from collections import deque
 
 # Tick context
+
+
 @contextmanager
 def tick_context(value, sleep=sleep):
     """Generate a context that controls the duration of its execution."""
@@ -19,8 +20,11 @@ def tick_context(value, sleep=sleep):
 
 
 class MagnetCycling(object):
-    def __init__(self, powersupply, hi_setpoint, lo_setpoint, wait, iterations, ramp_time, steps,
-                 nominal_setpoint_percentage=0.9, unit="A"):
+
+    def __init__(self, powersupply, hi_setpoint, lo_setpoint, wait,
+                 iterations, ramp_time, steps,
+                 nominal_setpoint_percentage=0.9,
+                 unit="A"):
         self.ps = powersupply
         # Conditions
         self.hi_set_point = hi_setpoint
@@ -37,6 +41,9 @@ class MagnetCycling(object):
         self.cycling_thread = None  # The conditioning thread
         self.cycling_stop = Event()  # Set when aborting.
         self.statemachine = None
+        self.error_stack = deque(maxlen=10)
+        self.cycling_interrupted = False
+        self.cycling_ended = False
 
     @property
     def cycling(self):
@@ -51,7 +58,19 @@ class MagnetCycling(object):
             # Stop any action
             self.stop()
 
+    def is_running(self):
+        try:
+            return self.cycling_thread.is_alive()
+        except AttributeError:
+            return False
+
+    @property
+    def cycling_errors(self):
+        return "/n".join(set(map(str, self.error_stack)))
+
     def start(self):
+        self.stop()
+        self.error_stack.clear()
         # Start the ramping
         self.cycling_stop.clear()
         self.statemachine = ConditioningState(
@@ -77,13 +96,30 @@ class MagnetCycling(object):
     @property
     def phase(self):
         """Get the 'phase' of the conditioning; a high-level state"""
-        if not self.statemachine:
-            return "NOT CYCLING (limits are %s %s %s)" % (self.lo_set_point, self.hi_set_point, self.unit)
+        if not self.statemachine or not self.cycling_thread.isAlive():
+            return "NOT CYCLING (limits are %s %s %s)" % (
+                self.lo_set_point, self.hi_set_point, self.unit)
         return (self.statemachine.state + self.statemachine.iterationstatus)
 
     def ramp(self, dt=0.001):
         """The main loop for one cycling run."""
+        self.cycling_ended = False
+        self.cycling_interrupted = False
         while not (self.statemachine.finished or self.cycling_stop.isSet()):
             with tick_context(dt, sleep=self.cycling_stop.wait):
-                self.statemachine.proceed()
+                try:
+                    self.statemachine.proceed()
+                except DevFailed as e:
+                    self.error_stack.append(e)
+                except Exception as e:
+                    msg = "The following exception was unexcpected and stop the "
+                    msg += "cycling:\n {} \n".format(e)
+                    self.error_stack.append(msg)
+                    self.cycling_interrupted = True
+                    self.statemachine = None
+                    raise e
+        finished = self.statemachine.finished
+        interupted = self.cycling_stop.isSet()
+        self.cycling_ended = finished
+        self.cycling_interrupted = interupted and not finished
         self.statemachine = None

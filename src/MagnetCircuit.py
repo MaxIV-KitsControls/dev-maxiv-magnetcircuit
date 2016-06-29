@@ -82,6 +82,8 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
     def delete_device(self):
         self.debug_stream("In delete_device()")
+        if self._cycler:
+            self._cycler.stop()
 
     def init_device(self):
         self.debug_stream("In init_device()")
@@ -89,7 +91,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.get_device_properties(self.get_device_class())
 
         # energy attribute eventually to be set by higher level device
-        self.energy_r = 3000000000.0  # =100 MeV for testing, needs to be read from somewhere
+        self.energy_r = 3000000000.0  # =100 MeV for testing,
         self.energy_w = None
         self.calculate_brho()  # a conversion factor that depends on energy
 
@@ -115,6 +117,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.field_out_of_range = False
         self.iscycling = False
         self.cyclingphase = "Cycling not set up"
+        self.cycling_errors = ""
         self.IntFieldQ = PyTango.AttrQuality.ATTR_VALID
         self.is_sole = False  # hack for solenoids until configured properly
         self.is_corr = False  # correctors differ from dipoles (theta vs Theta)
@@ -522,14 +525,22 @@ class MagnetCircuit(PyTango.Device_4Impl):
     def check_cycling_state(self):
         # see if reached end of cycle
         self.check_cycling_status()
+        try:
+            if self._cycler.is_running():
+                self.iscycling = True
+                return
+        except AttributeError:
+            pass
         if self.iscycling == True and "NOT CYCLING" in self.cyclingphase:
             self.iscycling = False
 
     def check_cycling_status(self):
         if self._cycler is None:
             self.cyclingphase = "Cycling not set up"
+            self.cycling_errors = ""
         else:
             self.cyclingphase = self._cycler.phase
+            self.cycling_errors =  self._cycler.cycling_errors
 
     def dev_status(self):
 
@@ -542,6 +553,8 @@ class MagnetCircuit(PyTango.Device_4Impl):
         msg = self.status_str_prop + "\n" + self.status_str_cfg + "\n" + self.status_str_cal + "\n" + \
               self.status_str_ps + "\n" + self.status_str_b + "\n" + self.status_str_cyc + "\nCycling status: " + \
               self.cyclingphase
+        if self.cycling_errors:
+            msg += "\n/!\\Errors durring cycling : " + self.cycling_errors
         self.status_str_fin = os.linesep.join([s for s in msg.splitlines() if s])
         return self.status_str_fin
 
@@ -746,13 +759,14 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
     def read_IntMainFieldComponent(self, attr):
         self.debug_stream("In read_IntMainFieldComponent()")
-        if self.hasCalibData == True:
-            attr_IntMainFieldComponent_read = self.MainFieldComponent_r * self.Length
-            attr.set_value(attr_IntMainFieldComponent_read)
+        if self.hasCalibData:
+            main_field_component = self.MainFieldComponent_r * self.Length
+            attr.set_value(main_field_component)
             attr.set_quality(self.IntFieldQ)
 
     def is_IntMainFieldComponent_allowed(self, attr):
-        return self.get_main_physical_quantity_and_field() and not self.field_out_of_range
+        quantity_and_field = self.get_main_physical_quantity_and_field()
+        return quantity_and_field and not self.field_out_of_range
 
     #
     def read_CyclingStatus(self, attr):
@@ -765,6 +779,11 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.debug_stream("In read_CyclingState()")
         # need to check cycling state
         self.check_cycling_state()
+        try:
+            if self._cycler.is_running():
+                attr.set_value(True)
+        except AttributeError:
+            pass
         attr.set_value(self.iscycling)
 
     def write_CyclingRampTime(self, attr):
@@ -834,6 +853,15 @@ class MagnetCircuit(PyTango.Device_4Impl):
     def write_CyclingSteps(self, attr):
         self.debug_stream("In write_CyclingSteps()")
         self._cycler.steps = attr.get_write_value()
+
+    def read_CyclingInterrupted(self, attr):
+        attr.set_value(self._cycler.cycling_interrupted)
+
+    def read_CyclingCompleted(self, attr):
+        attr.set_value(self._cycler.cycling_ended)
+
+    def read_CyclingHasErrors(self, attr):
+        attr.set_value(bool(len(self._cycler.error_stack)))
 
     def is_CyclingSteps_allowed(self, attr):
         self.check_cycling_state()
@@ -1061,6 +1089,30 @@ class MagnetCircuitClass(PyTango.DeviceClass):
              {
                  'label': "Cycling State",
                  'doc': "state of cycling procedure"
+             }],
+        'CyclingInterrupted':
+            [[PyTango.DevBoolean,
+              PyTango.SCALAR,
+              PyTango.READ],
+             {
+                 'label': "Cycling Interrupted",
+                 'doc': "True if the cycling has been interrupted"
+             }],
+        'CyclingCompleted':
+            [[PyTango.DevBoolean,
+              PyTango.SCALAR,
+              PyTango.READ],
+             {
+                 'label': "Cycling Conpleted",
+                 'doc': "True if the cycling has been done completly"
+             }],
+        'CyclingHasErrors':
+            [[PyTango.DevBoolean,
+              PyTango.SCALAR,
+              PyTango.READ],
+             {
+                 'label': "Cycling has errors",
+                 'doc': "True if some errors have been raised while cycling"
              }],
         'CyclingRampTime':
             [[PyTango.DevDouble,

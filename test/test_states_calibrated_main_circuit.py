@@ -71,7 +71,9 @@ class MagnetCircuitTestCase(DeviceTestCase):
 
         def make_proxy():
             mock_proxy = MagicMock()
-            mock_proxy.State.return_value=PyTango.DevState.ON
+            cls.mock_attr_read = MagicMock()
+            cls.mock_attr_read.value = PyTango.DevState.ON
+            mock_proxy.read_attribute.return_value = cls.mock_attr_read
             return mock_proxy
 
         def get_ps_attribute_config(attr):
@@ -110,36 +112,36 @@ class MagnetCircuitTestCase(DeviceTestCase):
     #Test 1
     def test_state_on_when_ps_is_on(self):
         print "Test 1.1"
-        self.ps_proxy.State.return_value = PyTango.DevState.ON
+        self.mock_attr_read.value = PyTango.DevState.ON
         self.assertEqual(self.device.State(), PyTango.DevState.ON)
 
     #Test 2
     def test_state_off_when_ps_is_off(self):
         print "Test 1.2"
-        self.ps_proxy.State.return_value = PyTango.DevState.OFF
+        self.mock_attr_read.value = PyTango.DevState.OFF
         self.assertEqual(self.device.State(), PyTango.DevState.OFF)
 
     #Test 2.5
     def test_state_fault_when_ps_is_fault(self):
         print "Test 1.25"
-        self.ps_proxy.State.return_value = PyTango.DevState.FAULT
+        self.mock_attr_read.value  = PyTango.DevState.FAULT
         self.assertEqual(self.device.State(), PyTango.DevState.FAULT)
 
     #Test 3
     def test_state_fault_when_ps_is_down(self):
         print "Test 1.3"
-        self.ps_proxy.State.side_effect = PyTango.DevFailed
+        self.ps_proxy.read_attribute.side_effect = PyTango.DevFailed
         self.assertEqual(self.device.State(), PyTango.DevState.FAULT)
 
     #Test 4
     def test_state_recovers_when_ps_recovers(self):
         print "Test 1.4"
         # simulate PS device broken
-        self.ps_proxy.State.side_effect = PyTango.DevFailed
+        self.ps_proxy.read_attribute.side_effect = PyTango.DevFailed
         self.assertEqual(self.device.State(), PyTango.DevState.FAULT)
         # turn PS device on
-        self.ps_proxy.State.return_value = PyTango.DevState.ON
-        self.ps_proxy.State.side_effect = None
+        self.mock_attr_read.value = PyTango.DevState.ON
+        self.ps_proxy.read_attribute.side_effect = None
         self.assertEqual(self.device.State(), PyTango.DevState.ON)
 
 
@@ -147,7 +149,7 @@ class MagnetCircuitTestCase(DeviceTestCase):
     def test_status_shows_if_magnet_types_not_the_same(self):
         self.magnet_proxies["SECTION/MAG/MAG-01"].Type = ["kquad"]
         print "Test 1.5"
-        self.device.Init()        
+        self.device.Init()
         #print self.device.Status()
         self.assertIn("Problems with properties of magnet device", self.device.Status())
 
@@ -156,7 +158,7 @@ class MagnetCircuitTestCase(DeviceTestCase):
     def test_status_shows_if_magnet_lengths_not_the_same(self):
         self.magnet_proxies["SECTION/MAG/MAG-01"].Length = ["2.0"]
         print "Test 1.6"
-        self.device.Init()        
+        self.device.Init()
         #print self.device.Status()
         self.assertIn("Problems with properties of magnet device", self.device.Status())
 
@@ -164,7 +166,7 @@ class MagnetCircuitTestCase(DeviceTestCase):
     def test_status_shows_if_magnet_lengths_not_the_same(self):
         self.magnet_proxies["SECTION/MAG/MAG-01"].Tilt = ["90"]
         print "Test 1.7"
-        self.device.Init()        
+        self.device.Init()
         #print self.device.Status()
         self.assertIn("Problems with properties of magnet device", self.device.Status())
 
