@@ -91,7 +91,17 @@ class MagnetCyclingStateMachineTestCase(unittest.TestCase):
     def test_exception(self):
         """ raise exception while looping """
         assert self.magnetcycling.cycling
+        assert not self.magnetcycling.cycling_interrupted
+        assert not self.magnetcycling.cycling_ended
         assert self.magnetcycling.cycling_thread.is_alive()
         self.statemachine.proceed.side_effect = DevFailed()
         sleep(LOOP)
         assert len(self.magnetcycling.error_stack) == 1
+        assert self.magnetcycling.cycling_thread.is_alive()
+        assert not self.magnetcycling.cycling_interrupted
+        assert not self.magnetcycling.cycling_ended
+        self.statemachine.proceed.side_effect = ZeroDivisionError()
+        sleep(LOOP)
+        assert len(self.magnetcycling.error_stack) == 2
+        assert self.magnetcycling.cycling_interrupted
+        assert not self.magnetcycling.cycling_ended
