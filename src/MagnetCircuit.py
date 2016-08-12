@@ -441,7 +441,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
             except (AttributeError, PyTango.DevFailed):
                 self.status_str_ps = "Cannot read state of PS " + self.PowerSupplyProxy
                 self.debug_stream(self.status_str_ps)
-                self._cycler = None
+                # self._cycler = None # why put cycler to None ?
                 return PyTango.DevState.FAULT
 
         else:
