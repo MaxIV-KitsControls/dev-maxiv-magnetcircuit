@@ -91,7 +91,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
         self.get_device_properties(self.get_device_class())
 
         # energy attribute eventually to be set by higher level device
-        self.energy_r = 3000000000.0  # =100 MeV for testing,
+        self.energy_r = 1500000000.0  # =100 MeV for testing,
         self.energy_w = None
         self.calculate_brho()  # a conversion factor that depends on energy
 
@@ -765,6 +765,8 @@ class MagnetCircuit(PyTango.Device_4Impl):
             attr.set_quality(self.IntFieldQ)
 
     def is_IntMainFieldComponent_allowed(self, attr):
+        print "HERE 1 ", self.get_main_physical_quantity_and_field()
+        print "HERE 2 ", self.field_out_of_range
         quantity_and_field = self.get_main_physical_quantity_and_field()
         return quantity_and_field and not self.field_out_of_range
 
