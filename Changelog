@@ -173,3 +173,6 @@
 18-03-2016 Paul Bell
 	* Fix state handling in magnet device according to states of main and trim circuits
 	* v2.0.1
+
+20-08-2016 Paul Bell
+	* Bump version to 2.2 in master branch, 2.1 for R1 continues in separate branch
