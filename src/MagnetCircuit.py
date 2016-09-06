@@ -205,7 +205,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
             magnet_device = PyTango.DeviceProxy(magnet_device_name)
             for prop, type_ in magnet_property_types.items():
                 try:
-                    prop_value = type_(magnet_device.get_property(prop)[prop][0]) 
+                    prop_value = type_(magnet_device.get_property(prop)[prop][0])
                 except (ValueError, IndexError):
                     # undefined property gives an empty list as a value
                     print >> self.log_fatal, ("Couldn't read property '%s' from magnet device '%s'; " +
@@ -446,7 +446,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
 
         else:
             self.status_str_ps = "Read PS state:  cannot get proxy to " + self.PowerSupplyProxy
-            self._cycler = None
+            # self._cycler = None
             ps_state = PyTango.DevState.FAULT
 
         return ps_state

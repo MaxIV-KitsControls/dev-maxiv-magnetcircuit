@@ -90,7 +90,7 @@ class MagnetCycling(object):
         # Stop the conditioning thread
         self.cycling_stop.set()
         # Wait the end of the ramping thread
-        if self.cycling_thread is not None:
+        if self.cycling_thread is not None and self.cycling_thread.isAlive():
             self.cycling_thread.join()
 
     @property
