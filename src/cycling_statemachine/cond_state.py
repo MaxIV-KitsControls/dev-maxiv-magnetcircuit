@@ -148,7 +148,7 @@ class MagnetCycling(StateMachine):
 
     def ramp_to_min_value(self):
         value = round(self.get_actual_value(), 3)
-        if round(value - self.lo_setpoint) > self.setpoint_step and value - self.setpoint_step > self.lo_setpoint:
+        if round(value - self.lo_setpoint, 3) > self.setpoint_step and value - self.setpoint_step > self.lo_setpoint:
             self.powersupply.setValue(value - self.setpoint_step)
             self.sleep_step()
         else:
