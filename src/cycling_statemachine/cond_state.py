@@ -87,7 +87,6 @@ class MagnetCycling(StateMachine):
             self.DONE)
 
     def check_power_supply_state(self):
-        print self.powersupply.isOn()
         ps_is_on = self.powersupply.isOn()
         if ps_is_on == False:
             self.sleep(POWER_SUPPLY_IS_ON_SLEEP)
@@ -108,7 +107,11 @@ class MagnetCycling(StateMachine):
         self.ref_time = time.time()
 
     def get_nom_value(self):
-        return self.hi_setpoint * self.nominal_setpoint_percentage
+        # Negative current and negative percentage.
+        if self.nominal_setpoint_percentage < 0 and self.lo_setpoint < 0:
+            return self.lo_setpoint * abs(self.nominal_setpoint_percentage)
+        else:
+            return self.hi_setpoint * self.nominal_setpoint_percentage
 
     def get_actual_value(self):
         return self.powersupply.getValue()

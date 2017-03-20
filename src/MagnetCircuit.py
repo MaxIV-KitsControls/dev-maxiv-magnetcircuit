@@ -1162,7 +1162,7 @@ class MagnetCircuitClass(PyTango.DeviceClass):
                  'label': "Nominal Set Point Percentage",
                  'format': "%6.6f",
                  'max value': "1.0",
-                 'min value': "0.0",
+                 'min value': "-1.0",
                  'doc': "Nominal set point after cycling (it is a percentage of the max set point "
              }],
 
