@@ -45,7 +45,7 @@ class Wrapped_PS_Device(object):
             self.psdev = psdev
         else:
             self.psdev = PyTango.DeviceProxy(psdev.dev_name())
-            self.psdev.set_source(PyTango.DevSource.DEV)
+            # self.psdev.set_source(PyTango.DevSource.DEV)
 
     def setValue(self, value):
         self.psdev.write_attribute(self.attr, value)
