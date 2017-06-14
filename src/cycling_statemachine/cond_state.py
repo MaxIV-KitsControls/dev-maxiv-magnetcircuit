@@ -69,8 +69,8 @@ class MagnetCycling(StateMachine):
             partial(self.is_step_finished, lambda: not self.powersupply.isMoving() and self.is_high_value())).goto(
             self.WAIT_HI)
 
-        # self.WAIT_HI.set_action(set_ref_time)
-        self.WAIT_HI.when(partial(self.is_step_finished, lambda: self.iterations == self.interations_max)).do(
+        self.WAIT_HI.set_action(self.increase_interation)
+        self.WAIT_HI.when(partial(self.is_step_finished, lambda: self.iterations >= self.interations_max)).do(
             self.sleep, self.wait).goto(self.SET_STEP_NOM_VALUE)
         self.WAIT_HI.when(partial(self.is_step_finished, lambda: self.iterations < self.interations_max)).do(self.sleep,
                                                                                                              self.wait).goto(
@@ -86,8 +86,11 @@ class MagnetCycling(StateMachine):
             partial(self.is_step_finished, lambda: not self.powersupply.isMoving() and self.is_nom_value())).goto(
             self.DONE)
 
+    def increase_interation(self):
+        self.iterations += 1
+        self.iterationstatus = " (" + str(self.iterations) + "/" + str(self.interations_max) + ")"
+
     def check_power_supply_state(self):
-        print self.powersupply.isOn()
         ps_is_on = self.powersupply.isOn()
         if ps_is_on == False:
             self.sleep(POWER_SUPPLY_IS_ON_SLEEP)
@@ -108,7 +111,11 @@ class MagnetCycling(StateMachine):
         self.ref_time = time.time()
 
     def get_nom_value(self):
-        return self.hi_setpoint * self.nominal_setpoint_percentage
+        # Negative current and negative percentage.
+        if self.nominal_setpoint_percentage < 0 and self.lo_setpoint < 0:
+            return self.lo_setpoint * abs(self.nominal_setpoint_percentage)
+        else:
+            return self.hi_setpoint * self.nominal_setpoint_percentage
 
     def get_actual_value(self):
         return self.powersupply.getValue()
@@ -139,8 +146,8 @@ class MagnetCycling(StateMachine):
             self.sleep_step()
         else:
             self.powersupply.setValue(self.hi_setpoint)
-            self.iterations = self.iterations + 1
-            self.iterationstatus = " (" + str(self.iterations) + "/" + str(self.interations_max) + ")"
+            # self.iterations = self.iterations + 1
+            # self.iterationstatus = " (" + str(self.iterations) + "/" + str(self.interations_max) + ")"
 
     def init_ramp_to_min_value(self):
         self.ref_time = time.time()
