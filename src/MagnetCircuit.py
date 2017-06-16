@@ -417,7 +417,7 @@ class MagnetCircuit(PyTango.Device_4Impl):
             return
 
         if self.ps_device:
-            self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device, self.ps_attribute, use_cache=False)
+            self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device, self.ps_attribute, use_cache=True)
             self._cycler = MagnetCycling(powersupply=self.wrapped_ps_device,
                                          hi_setpoint=self.max_setpoint_value,
                                          lo_setpoint=self.min_setpoint_value,
