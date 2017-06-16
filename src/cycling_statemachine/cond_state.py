@@ -7,9 +7,9 @@ POWER_SUPPLY_IS_ON_SLEEP = 10  # s
 
 
 class MagnetCycling(StateMachine):
-    def __init__(self, powersupply,
-                 hi_setpoint, lo_setpoint, wait, iterations_max,
-                 ramp_time, steps, nominal_setpoint_percentage=0.9, event=None):
+    def __init__(self, powersupply, hi_setpoint, lo_setpoint, wait,
+                 iterations_max, ramp_time, steps,
+                 nominal_setpoint_percentage=0.9, event=None):
         self.powersupply = powersupply
         self.event = event
         if event:
@@ -18,22 +18,22 @@ class MagnetCycling(StateMachine):
             self.sleep = time.sleep
         self.hi_setpoint = hi_setpoint
         self.lo_setpoint = lo_setpoint
-        self.nominal_setpoint_percentage = nominal_setpoint_percentage  # nominal value is a percentage of the max value
+        # nominal value is a percentage of the max value
+        self.nominal_setpoint_percentage = nominal_setpoint_percentage
         self.wait = wait  # time (s) to wait at max and min
         self.iterations = 0
         self.interations_max = iterations_max
         self.ref_time = 0
         try:
-            self.step_time = ramp_time / (steps - 1)  # increase/decrease value and wait
+            # increase/decrease value and wait
+            self.step_time = ramp_time / (steps - 1)
         except ZeroDivisionError:
             self.step_time = ramp_time
         self.setpoint_step = round((hi_setpoint - lo_setpoint) / steps, 3)
         self.step_timeout = 0
-        self.iterationstatus = " (" + str(self.iterations) + "/" + str(self.interations_max) + ")"
-
-        def print_state_change(old, new):
-            print("\t iter : %d %3.3f: %s -> %s" % (self.iterations, time.time(), old, new))
-
+        self.iterationstatus = " (" + str(self.iterations) + "/"
+        self.iterationstatus += str(self.interations_max) + ")"
+        # Define state
         states = ["INITIALISE",
                   "SET_STEP_LO",
                   "WAIT_LO",
@@ -41,54 +41,96 @@ class MagnetCycling(StateMachine):
                   "WAIT_HI",
                   "SET_STEP_NOM_VALUE",
                   "DONE"]
-
+        # Setup state machine
         StateMachine.__init__(self, states)
+        # Setup State rules
+        self._setup_states()
 
-        self.INITIALISE.when(self.check_power_supply_state).goto(self.SET_STEP_LO)
+    def _setup_states(self):
+        self._setup_init_state()
+        self._setup_setlo_state()
+        self._setup_waitlo_state()
+        self._setup_stephi_state()
+        self._setup_waithi_state()
+        self._setup_stepnom_state()
 
-        # decrease value by step
+    def _setup_init_state(self):
+        # INITIALISE State
+        nx_state = self.SET_STEP_LO
+        self.INITIALISE.when(self.check_power_supply_state).goto(nx_state)
+
+    def _setup_setlo_state(self):
+        # SET_STEP_LO State
+        # Decrease value by step
         self.SET_STEP_LO.set_action(self.init_ramp_to_min_value)
+        # Decrease value at each step
         self.SET_STEP_LO.set_recurring_action(self.ramp_to_min_value)
-        self.SET_STEP_LO.when(
-            partial(self.is_step_finished, lambda: not self.powersupply.isMoving() and not self.is_low_value())).goto(
-            self.SET_STEP_LO)
-        self.SET_STEP_LO.when(
-            partial(self.is_step_finished, lambda: not self.powersupply.isMoving() and self.is_low_value())).goto(
-            self.WAIT_LO)
+        # Loop on this state condition
+        loop_in = partial(
+            self.is_step_finished,
+            lambda: not self.powersupply.isMoving() and not self.is_low_value())
+        self.SET_STEP_LO.when(loop_in).goto(self.SET_STEP_LO)
+        # Go to the next state
+        go_next = partial(
+            self.is_step_finished,
+            lambda: not self.powersupply.isMoving() and self.is_low_value())
+        self.SET_STEP_LO.when(go_next).goto(self.WAIT_LO)
 
-        # waiting state when value is at minimum value
-        self.WAIT_LO.when(lambda: not self.is_interupted()).do(self.sleep, self.wait).goto(self.SET_STEP_HI)
+    def _setup_waitlo_state(self):
+        # Waiting state when value is at minimum value
+        self.WAIT_LO.when(lambda: not self.is_interupted()).do(
+            self.sleep, self.wait).goto(self.SET_STEP_HI)
 
-        # increase value by step
+    def _setup_stephi_state(self):
+        # Increase value by step
         self.SET_STEP_HI.set_action(self.init_ramp_to_max_value)
         self.SET_STEP_HI.set_recurring_action(self.ramp_to_max_value)
-        self.SET_STEP_HI.when(
-            partial(self.is_step_finished, lambda: not self.powersupply.isMoving() and not self.is_high_value())).goto(
-            self.SET_STEP_HI)
-        self.SET_STEP_HI.when(
-            partial(self.is_step_finished, lambda: not self.powersupply.isMoving() and self.is_high_value())).goto(
-            self.WAIT_HI)
+        loop_in = partial(
+            self.is_step_finished,
+            lambda: not self.powersupply.isMoving() and not self.is_high_value()
+        )
+        self.SET_STEP_HI.when(loop_in).goto(self.SET_STEP_HI)
+        go_next = partial(
+            self.is_step_finished,
+            lambda: not self.powersupply.isMoving() and self.is_high_value())
+        self.SET_STEP_HI.when(go_next).goto(self.WAIT_HI)
 
-        # self.WAIT_HI.set_action(set_ref_time)
-        self.WAIT_HI.when(partial(self.is_step_finished, lambda: self.iterations == self.interations_max)).do(
-            self.sleep, self.wait).goto(self.SET_STEP_NOM_VALUE)
-        self.WAIT_HI.when(partial(self.is_step_finished, lambda: self.iterations < self.interations_max)).do(self.sleep,
-                                                                                                             self.wait).goto(
+    def _setup_waithi_state(self):
+        self.WAIT_HI.set_action(self.increase_interation)
+        # End cycling
+        end_cycling = partial(
+            self.is_step_finished,
+            lambda: self.iterations >= self.interations_max)
+        self.WAIT_HI.when(end_cycling).do(self.sleep, self.wait).goto(
+            self.SET_STEP_NOM_VALUE)
+        # New cycle
+        continue_cycle = partial(
+            self.is_step_finished,
+            lambda: self.iterations < self.interations_max)
+        self.WAIT_HI.when(continue_cycle).do(self.sleep, self.wait).goto(
             self.SET_STEP_LO)
 
+    def _setup_stepnom_state(self):
         # decrese value to nominal state
         self.SET_STEP_NOM_VALUE.set_action(self.init_ramp_to_nom_value)
         self.SET_STEP_NOM_VALUE.set_recurring_action(self.ramp_to_nom_value)
-        self.SET_STEP_NOM_VALUE.when(
-            partial(self.is_step_finished, lambda: not self.powersupply.isMoving() and not self.is_nom_value())).goto(
-            self.SET_STEP_NOM_VALUE)
-        self.SET_STEP_NOM_VALUE.when(
-            partial(self.is_step_finished, lambda: not self.powersupply.isMoving() and self.is_nom_value())).goto(
-            self.DONE)
+        loop_in = partial(self.is_step_finished,
+                          lambda: not self.powersupply.isMoving() and
+                          not self.is_nom_value())
+        self.SET_STEP_NOM_VALUE.when(loop_in).goto(self.SET_STEP_NOM_VALUE)
+        done = partial(
+            self.is_step_finished,
+            lambda: not self.powersupply.isMoving() and self.is_nom_value())
+        self.SET_STEP_NOM_VALUE.when(done).goto(self.DONE)
+
+    def increase_interation(self):
+        self.iterations += 1
+        self.iterationstatus = " (" + str(self.iterations)
+        self.iterationstatus += "/" + str(self.interations_max) + ")"
 
     def check_power_supply_state(self):
         ps_is_on = self.powersupply.isOn()
-        if ps_is_on == False:
+        if not ps_is_on:
             self.sleep(POWER_SUPPLY_IS_ON_SLEEP)
         return ps_is_on
 
@@ -137,13 +179,12 @@ class MagnetCycling(StateMachine):
 
     def ramp_to_max_value(self):
         value = round(self.get_actual_value(), 3)
-        if round(self.hi_setpoint - value, 3) > self.setpoint_step and value + self.setpoint_step < self.hi_setpoint:
+        if round(self.hi_setpoint - value, 3) > self.setpoint_step and \
+                value + self.setpoint_step < self.hi_setpoint:
             self.powersupply.setValue(value + self.setpoint_step)
             self.sleep_step()
         else:
             self.powersupply.setValue(self.hi_setpoint)
-            self.iterations = self.iterations + 1
-            self.iterationstatus = " (" + str(self.iterations) + "/" + str(self.interations_max) + ")"
 
     def init_ramp_to_min_value(self):
         self.ref_time = time.time()
@@ -151,7 +192,8 @@ class MagnetCycling(StateMachine):
 
     def ramp_to_min_value(self):
         value = round(self.get_actual_value(), 3)
-        if round(value - self.lo_setpoint, 3) > self.setpoint_step and value - self.setpoint_step > self.lo_setpoint:
+        if round(value - self.lo_setpoint, 3) > self.setpoint_step and \
+                value - self.setpoint_step > self.lo_setpoint:
             self.powersupply.setValue(value - self.setpoint_step)
             self.sleep_step()
         else:
