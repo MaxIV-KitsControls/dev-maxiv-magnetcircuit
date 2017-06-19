@@ -46,12 +46,17 @@ class Wrapped_PS_Device(object):
         else:
             self.psdev = PyTango.DeviceProxy(psdev.dev_name())
             # self.psdev.set_source(PyTango.DevSource.DEV)
+        self.w_value = self.psdev.read_attribute(self.attr).w_value
 
     def setValue(self, value):
+        self.w_value = value
         self.psdev.write_attribute(self.attr, value)
 
-    def getValue(self):
-        return self.psdev.read_attribute(self.attr).w_value
+    def getValue(self, use_cache=True):
+        if use_cache:
+            return self.w_value
+        else:
+            return self.psdev.read_attribute(self.attr).w_value
 
     def isOn(self):
         if self.psdev.state() in [PyTango.DevState.ON]:
