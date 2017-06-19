@@ -422,8 +422,9 @@ class MagnetCircuit(PyTango.Device_4Impl):
             return
 
         if self.ps_device:
-            self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device, self.ps_attribute, use_cache=True)
-            self._cycler = MagnetCycling(powersupply=self.wrapped_ps_device,
+            try:
+                self.wrapped_ps_device = Wrapped_PS_Device(self.ps_device, self.ps_attribute, use_cache=True)
+                self._cycler = MagnetCycling(powersupply=self.wrapped_ps_device,
                                          hi_setpoint=self.max_setpoint_value,
                                          lo_setpoint=self.min_setpoint_value,
                                          wait=self._default_wait,
@@ -431,6 +432,9 @@ class MagnetCircuit(PyTango.Device_4Impl):
                                          ramp_time=self._default_ramp_time,
                                          steps=self._default_steps,
                                          unit=self.ps_unit)
+            except PyTango.DevFailed:
+                self._cycler = None
+                self.status_str_cyc = "Setup cycling: cannot get current value from %s " % self.PowerSupplyProxy
         else:
             self.status_str_cyc = "Setup cycling: cannot get proxy to %s " % self.PowerSupplyProxy
 
