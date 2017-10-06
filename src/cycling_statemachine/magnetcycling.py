@@ -73,6 +73,8 @@ class MagnetCycling(object):
         self.error_stack.clear()
         # Start the ramping
         self.cycling_stop.clear()
+        # Update PS wrapper cache.
+        self.ps._reset_w_value()
         self.statemachine = ConditioningState(
             powersupply=self.ps,
             hi_setpoint=self.hi_set_point,

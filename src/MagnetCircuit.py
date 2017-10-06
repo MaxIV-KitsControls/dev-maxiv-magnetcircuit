@@ -48,10 +48,12 @@ class Wrapped_PS_Device(object):
             self.psdev.set_source(PyTango.DevSource.DEV)
         self.w_value = self.psdev.read_attribute(self.attr).w_value
 
+    def _reset_w_value(self):
+        self.w_value = self.psdev.read_attribute(self.attr).w_value
+
     def setValue(self, value):
         self.w_value = value
         self.psdev.write_attribute(self.attr, value)
-
 
     def getValue(self, use_cache=True):
         if use_cache:
